@@ -83,9 +83,44 @@ def parse_args() -> argparse.Namespace:
         help="Output shell script containing all generated commands.",
     )
     parser.add_argument(
+        "--tcsh-switch-out",
+        default="generated_memtrace_mix4_cases.tcsh",
+        help="Output tcsh switch($bcode) script compatible with Slurm launcher style.",
+    )
+    parser.add_argument(
+        "--no-tcsh-switch",
+        action="store_true",
+        help="Do not generate the tcsh switch script.",
+    )
+    parser.add_argument(
         "--manifest-out",
         default="generated_memtrace_mix4_runs.csv",
         help="Output CSV mapping each command to mix/permutation/core assignment.",
+    )
+    parser.add_argument(
+        "--tcsh-exec-cmd",
+        default="$exec_path/$executable",
+        help="Executable expression used in generated tcsh cases.",
+    )
+    parser.add_argument(
+        "--tcsh-extra-options",
+        default="$EXTRA_OPTIONS",
+        help="Extra options expression used in generated tcsh cases.",
+    )
+    parser.add_argument(
+        "--tcsh-outdir-var",
+        default="$outdir",
+        help="Output directory expression used in generated tcsh cases.",
+    )
+    parser.add_argument(
+        "--tcsh-params-file",
+        default="$exec_path/PARAMS.golden_cove",
+        help="PARAMS file expression copied into each generated tcsh run directory.",
+    )
+    parser.add_argument(
+        "--tcsh-include-inst-limit",
+        action="store_true",
+        help="Also include --inst_limit in tcsh cases (normally supplied via $EXTRA_OPTIONS).",
     )
     return parser.parse_args()
 
@@ -141,6 +176,51 @@ def build_command(
     return " ".join(cmd)
 
 
+def build_tcsh_case_command(
+    tcsh_exec_cmd: str,
+    perm: Sequence[str],
+    run_name: str,
+    tcsh_outdir_var: str,
+    tcsh_extra_options: str,
+    inst_limit: int,
+    include_inst_limit: bool,
+) -> str:
+    cmd = [
+        tcsh_exec_cmd,
+        "--frontend",
+        "memtrace",
+        "--num_cores=4",
+        f"--cbp_trace_r0={perm[0]}",
+        f"--cbp_trace_r1={perm[1]}",
+        f"--cbp_trace_r2={perm[2]}",
+        f"--cbp_trace_r3={perm[3]}",
+    ]
+    if include_inst_limit:
+        cmd.append(f"--inst_limit={inst_limit}")
+    if tcsh_extra_options.strip():
+        cmd.append(tcsh_extra_options.strip())
+    cmd.append(f"--output_dir={tcsh_outdir_var}/{run_name}.dir")
+    return " ".join(cmd) + f" >& {tcsh_outdir_var}/{run_name}.out"
+
+
+def build_tcsh_case_block(
+    bcode: int,
+    run_name: str,
+    case_command: str,
+    tcsh_outdir_var: str,
+    tcsh_params_file: str,
+) -> str:
+    lines = [
+        f"case {bcode}:",
+        f"mkdir -p {tcsh_outdir_var}/{run_name}.dir",
+        f"cd {tcsh_outdir_var}/{run_name}.dir",
+        f"cp {tcsh_params_file} PARAMS.in",
+        case_command,
+        "breaksw",
+    ]
+    return "\n".join(lines)
+
+
 def write_outputs(
     script_path: Path,
     manifest_path: Path,
@@ -157,17 +237,42 @@ def write_outputs(
         writer = csv.writer(csv_file)
         writer.writerow(
             [
+                "bcode",
                 "mix_id",
                 "perm_id",
-                "output_dir",
+                "run_name",
                 "core0",
                 "core1",
                 "core2",
                 "core3",
-                "command",
+                "bash_command",
+                "tcsh_case_command",
             ]
         )
         writer.writerows(rows)
+
+
+def write_tcsh_switch(tcsh_path: Path, case_blocks: Sequence[str]) -> None:
+    lines: List[str] = [
+        "#!/bin/tcsh",
+        "# Auto-generated switch cases for memtrace multicore permutation runs.",
+        "# Usage: set bcode=<case_id>; then execute this script body in your launcher.",
+        "",
+        "switch($bcode)",
+    ]
+    lines.extend(case_blocks)
+    lines.extend(
+        [
+            "default:",
+            'echo "Unknown bcode: $bcode"',
+            "exit 1",
+            "breaksw",
+            "endsw",
+            "",
+        ]
+    )
+    tcsh_path.write_text("\n".join(lines), encoding="utf-8")
+    os.chmod(tcsh_path, 0o755)
 
 
 def main() -> None:
@@ -181,43 +286,70 @@ def main() -> None:
 
     commands: List[str] = []
     manifest_rows: List[List[str]] = []
+    tcsh_case_blocks: List[str] = []
+    bcode = 1
 
     for mix_idx, mix in enumerate(mixes, start=1):
         perms = list(itertools.permutations(mix))
         for perm_idx, perm in enumerate(perms, start=1):
             perm_abs = tuple(with_prefix(p, args.trace_prefix) for p in perm)
             tags = [trace_tag(p) for p in perm]
-            output_dir = (
+            run_name = (
                 f"{args.output_prefix}_M{mix_idx:02d}_P{perm_idx:02d}_"
                 f"C0_{tags[0]}_C1_{tags[1]}_C2_{tags[2]}_C3_{tags[3]}"
             )
-            command = build_command(
+            bash_command = build_command(
                 scarab_bin=args.scarab_bin,
                 perm=perm_abs,
                 inst_limit=args.inst_limit,
-                output_dir=output_dir,
+                output_dir=run_name,
                 extra_args=args.extra_args,
             )
-            commands.append(command)
+            tcsh_case_command = build_tcsh_case_command(
+                tcsh_exec_cmd=args.tcsh_exec_cmd,
+                perm=perm_abs,
+                run_name=run_name,
+                tcsh_outdir_var=args.tcsh_outdir_var,
+                tcsh_extra_options=args.tcsh_extra_options,
+                inst_limit=args.inst_limit,
+                include_inst_limit=args.tcsh_include_inst_limit,
+            )
+            tcsh_case_blocks.append(
+                build_tcsh_case_block(
+                    bcode=bcode,
+                    run_name=run_name,
+                    case_command=tcsh_case_command,
+                    tcsh_outdir_var=args.tcsh_outdir_var,
+                    tcsh_params_file=args.tcsh_params_file,
+                )
+            )
+            commands.append(bash_command)
             manifest_rows.append(
                 [
+                    str(bcode),
                     f"{mix_idx:02d}",
                     f"{perm_idx:02d}",
-                    output_dir,
+                    run_name,
                     perm_abs[0],
                     perm_abs[1],
                     perm_abs[2],
                     perm_abs[3],
-                    command,
+                    bash_command,
+                    tcsh_case_command,
                 ]
             )
+            bcode += 1
 
     script_out = Path(args.script_out)
     manifest_out = Path(args.manifest_out)
     write_outputs(script_out, manifest_out, commands, manifest_rows)
+    if not args.no_tcsh_switch:
+        write_tcsh_switch(Path(args.tcsh_switch_out), tcsh_case_blocks)
 
     print(f"Generated {len(mixes)} mixes x 24 permutations = {len(commands)} commands")
     print(f"Shell script: {script_out}")
+    if not args.no_tcsh_switch:
+        print(f"tcsh switch script: {args.tcsh_switch_out}")
     print(f"Manifest CSV: {manifest_out}")
 
 
