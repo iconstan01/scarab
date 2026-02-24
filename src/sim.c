@@ -203,16 +203,29 @@ static inline void check_heartbeat(uns8 proc_id, Flag final) {
     inst_diff = inst_count_to_use - rounded_interval * period_ID;
   }
 
-  /* dump warmup stats for all cores when core 0 reaches FULL_WARMUP */
-  /* Notice: we only check core 0. The cores are not synchronized. The other core can be have different progress */
-  if (FULL_WARMUP && !warmup_dump_done[0] && inst_count_to_use >= FULL_WARMUP) {
-    ASSERT(proc_id, !PERIODIC_DUMP);
+  /* Dump FULL_WARMUP stats only after all active cores have reached the warmup point. */
+  if (FULL_WARMUP && !warmup_dump_done[0]) {
+    Flag all_cores_warmed_up = TRUE;
     for (uns i = 0; i < NUM_CORES; i++) {
-      dump_stats(i, TRUE, global_stat_array[i], NUM_GLOBAL_STATS);
-      period_last_inst_count[i] = inst_count_fetched[i];
-      warmup_dump_done[i] = TRUE;
+      if (SIM_MODEL != DUMB_MODEL && DUMB_CORE_ON && DUMB_CORE == i)
+        continue;
+
+      Counter core_inst_count = USE_FETCHED_COUNT ? inst_count_fetched[i] : inst_count[i];
+      if (core_inst_count < FULL_WARMUP && !retired_exit[i] && !sim_done[i]) {
+        all_cores_warmed_up = FALSE;
+        break;
+      }
     }
-    period_last_cycle_count = cycle_count;
+
+    if (all_cores_warmed_up) {
+      ASSERT(proc_id, !PERIODIC_DUMP);
+      for (uns i = 0; i < NUM_CORES; i++) {
+        dump_stats(i, TRUE, global_stat_array[i], NUM_GLOBAL_STATS);
+        period_last_inst_count[i] = inst_count_fetched[i];
+        warmup_dump_done[i] = TRUE;
+      }
+      period_last_cycle_count = cycle_count;
+    }
   }
 
   /* print heartbeat message if necessary */
@@ -581,7 +594,7 @@ void uop_sim() {
             FATAL_ERROR(proc_id, "Access to 0x0\n");
           }
 
-          //if (DUMP_TRACE && DEBUG_RANGE_COND(proc_id))
+          if (DUMP_TRACE && DEBUG_RANGE_COND(proc_id))
             print_func_op(&op);
 
           op_count[proc_id]++;
@@ -620,8 +633,18 @@ void uop_sim() {
       }
     }
     switch (operating_mode) {
-      case WARMUP_MODE:
-        if (inst_count[0] == WARMUP || retired_exit[0]) {
+      case WARMUP_MODE: {
+        Flag all_cores_warmed_up = TRUE;
+        for (uns i = 0; i < NUM_CORES; i++) {
+          if (DUMB_CORE_ON && DUMB_CORE == i)
+            continue;
+          if (inst_count[i] < WARMUP && !retired_exit[i]) {
+            all_cores_warmed_up = FALSE;
+            break;
+          }
+        }
+
+        if (all_cores_warmed_up) {
           uop_sim_done = TRUE;
           // Reset counts and flags for ALL cores when transitioning to simulation
           for (uns i = 0; i < NUM_CORES; i++) {
@@ -639,6 +662,7 @@ void uop_sim() {
         } while (!freq_is_ready(FREQ_DOMAIN_L1));
         sim_time = freq_time();
         break;
+      }
       default:
         ASSERT(0, operating_mode == SIMULATION_MODE);
         break;
@@ -753,12 +777,16 @@ void full_sim() {
             // other sim mode should not trigger bogus mode including FT_MEMRACE
             cmp_init_bogus_sim(proc_id);
           } else {
-            // For PT/MEMTRACE: core stays done, no bogus mode support
-            // Clear retired_exit so we don't hit the else-if branch below
-            retired_exit[proc_id] = FALSE;
+            // For non-trace frontends there is no bogus-mode replay.
+            // Keep retired_exit asserted for PIN_EXEC_DRIVEN so frontend_done()
+            // can avoid sending a final FE_RETIRE to already-exited clients.
+            if (FRONTEND != FE_PIN_EXEC_DRIVEN) {
+              // PT/MEMTRACE cores should not retrigger done handling.
+              retired_exit[proc_id] = FALSE;
+            }
           }
         }
-      } else if (sim_done[proc_id] && retired_exit[proc_id]) {
+      } else if (FRONTEND == FE_TRACE && sim_done[proc_id] && retired_exit[proc_id]) {
         // Core already done but retired_exit triggered again
         // This should only happen in FE_TRACE bogus mode
         ASSERTM(proc_id, FRONTEND == FE_TRACE, "retired_exit set on finished core for non-trace frontend\n");
