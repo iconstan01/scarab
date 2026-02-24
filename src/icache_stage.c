@@ -68,6 +68,7 @@
 #include "statistics.h"
 #include "thread.h"
 #include "uop_queue_stage.h"
+#include "tlb.h"
 
 /**************************************************************************************/
 /* Macros */
@@ -366,6 +367,10 @@ Inst_Info** lookup_icache() {
   STAT_EVENT(ic->proc_id, POWER_ITLB_ACCESS);
 
   Inst_Info** line = NULL;
+  uns itlb_penalty = itlb_lookup(ic->proc_id, ic->fetch_addr); 
+  if (itlb_penalty > 0) {
+    ic->itlb_miss_stall_until = cycle_count + itlb_penalty;
+  } 
   line = (Inst_Info**)cache_access(&ic->icache, ic->fetch_addr, &ic->line_addr, TRUE);
   if (PERFECT_ICACHE && !line)
     line = (Inst_Info**)INIT_CACHE_DATA_VALUE;
@@ -793,6 +798,12 @@ void execute_coupled_FSM() {
   STAT_EVENT(ic->proc_id, FETCH_ON_PATH + ic->off_path);
 
   Break_Reason break_fetch = BREAK_DONT;
+
+  if (!PERFECT_TLB && cycle_count < ic->itlb_miss_stall_until) {
+    break_fetch = BREAK_ICACHE_STALLED;
+    return;
+  }
+
   ic->state = ic->next_state;
   DEBUG(ic->proc_id, "Icache state: %i\n", ic->state);
   if (ic->icache_stage_resteer_signaled) {

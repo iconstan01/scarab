@@ -55,6 +55,7 @@
 #include "model.h"
 #include "statistics.h"
 #include "thread.h"
+#include "tlb.h"
 
 /**************************************************************************************/
 /* Macros */
@@ -251,6 +252,7 @@ void update_dcache_stage(Stage_Data* src_sd) {
       ideal_l2l1_prefetcher(op);
 
     /* now access the dcache with it */
+    op->inst_info->tlb_latency = dtlb_lookup(dc->proc_id, op->oracle_info.va);
     Addr line_addr;
     Dcache_Data* line = (Dcache_Data*)cache_access(&dc->dcache, op->oracle_info.va, &line_addr, TRUE);
     op->dcache_cycle = cycle_count;
@@ -519,7 +521,7 @@ static inline void dcache_miss_extra_access(Op* op, Cache* cache, Addr line_addr
   }
 
   Flag ret = new_mem_req(MRT_DFETCH, proc_id, extra_line_addr, cache->line_size,
-                         cache_cycle - 1 + op->inst_info->extra_ld_latency, NULL, NULL, op->unique_num, 0);
+                         cache_cycle - 1 + op->inst_info->extra_ld_latency + op->inst_info->tlb_latency, NULL, NULL, op->unique_num, 0);
   if (ret)
     STAT_EVENT_ALL(ONE_MORE_SUCESS);
   else
@@ -528,7 +530,7 @@ static inline void dcache_miss_extra_access(Op* op, Cache* cache, Addr line_addr
 
 static inline Flag dcache_miss_new_mem_req(Op* op, Addr line_addr, Mem_Req_Type mem_req_type) {
   return new_mem_req((mem_req_type), dc->proc_id, line_addr, DCACHE_LINE_SIZE,
-                     DCACHE_CYCLES - 1 + op->inst_info->extra_ld_latency, op, dcache_fill_line, op->unique_num, 0);
+                     DCACHE_CYCLES - 1 + op->inst_info->extra_ld_latency + op->inst_info->tlb_latency, op, dcache_fill_line, op->unique_num, 0);
 }
 
 static inline void dcache_cacheline_hit(Op* op, Addr line_addr, Dcache_Data* line) {
@@ -566,7 +568,7 @@ static inline void dcache_cacheline_hit(Op* op, Addr line_addr, Dcache_Data* lin
   }
 
   /* update cacheline state */
-  op->done_cycle = cycle_count + DCACHE_CYCLES + op->inst_info->extra_ld_latency;
+  op->done_cycle = cycle_count + DCACHE_CYCLES + op->inst_info->extra_ld_latency + op->inst_info->tlb_latency;
   line->read_count[op->off_path] = line->read_count[op->off_path] + (op->table_info->mem_type == MEM_LD);
   line->write_count[op->off_path] = line->write_count[op->off_path] + (op->table_info->mem_type == MEM_ST);
   line->misc_state = (line->misc_state & 2) | op->off_path;
@@ -603,8 +605,8 @@ static inline void dcache_cacheline_miss(Op* op, Addr line_addr) {
           STAT_EVENT(op->proc_id, DCACHE_ST_BUFFER_HIT_OFFPATH);
         }
 
-        op->done_cycle = cycle_count + DCACHE_CYCLES + op->inst_info->extra_ld_latency;
-        op->wake_cycle = cycle_count + DCACHE_CYCLES + op->inst_info->extra_ld_latency;
+        op->done_cycle = cycle_count + DCACHE_CYCLES + op->inst_info->extra_ld_latency + op->inst_info->tlb_latency;
+        op->wake_cycle = cycle_count + DCACHE_CYCLES + op->inst_info->extra_ld_latency + op->inst_info->tlb_latency;
         wake_up_ops(op, REG_DATA_DEP, model->wake_hook);
         break;
       }
@@ -667,7 +669,7 @@ static inline void dcache_cacheline_miss(Op* op, Addr line_addr) {
       }
       op->state = OS_MISS;
       if (PREFS_DO_NOT_BLOCK_WINDOW || op->table_info->mem_type == MEM_PF) {
-        op->done_cycle = cycle_count + DCACHE_CYCLES + op->inst_info->extra_ld_latency;
+        op->done_cycle = cycle_count + DCACHE_CYCLES + op->inst_info->extra_ld_latency + op->inst_info->tlb_latency;
         op->state = OS_SCHEDULED;
       }
       break;
