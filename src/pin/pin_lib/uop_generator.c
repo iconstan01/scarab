@@ -494,6 +494,7 @@ void convert_t_uop_to_info(uns8 proc_id, Trace_Uop* t_uop, Inst_Info* info) {
 
   info->trigger_op_fetched_hook = FALSE; /* FIXME */
   info->extra_ld_latency = 0;
+  info->tlb_latency = 0;
 }
 
 static void clear_t_uop(Trace_Uop* uop) {

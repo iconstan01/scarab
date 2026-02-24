@@ -51,6 +51,35 @@
 */
 DEF_PARAM(enable_swprf, ENABLE_SWPRF, Flag, Flag, FALSE, )
 
+/* TLB PARAMS Edited by: Ioannis */
+
+DEF_PARAM(perfect_tlb, PERFECT_TLB, Flag, Flag, TRUE, ) // If True it means it will not model any TLBs. Set to false if you want to Model TLBs
+
+/* L1 DTLB */ 
+DEF_PARAM(dtlb_entries, DTLB_ENTRIES, uns, uns, 96, )
+DEF_PARAM(dtlb_assoc, DTLB_ASSOC, uns, uns, 12, )
+
+/* L1 ITLB */
+DEF_PARAM(itlb_entries, ITLB_ENTRIES, uns, uns, 128, )
+DEF_PARAM(itlb_assoc, ITLB_ASSOC, uns, uns, 8, )
+
+/* Unified L2 TLB */
+DEF_PARAM(l2_tlb_entries, L2_TLB_ENTRIES, uns, uns, 2048, )
+DEF_PARAM(l2_tlb_assoc, L2_TLB_ASSOC, uns, uns, 16, )
+DEF_PARAM(l2_tlb_latency, L2_TLB_LATENCY, uns, uns, 8, )
+
+
+DEF_PARAM(l3_tlb_entries, L3_TLB_ENTRIES, uns, uns, 4096, )
+DEF_PARAM(l3_tlb_assoc, L3_TLB_ASSOC, uns, uns, 16, )
+DEF_PARAM(l3_tlb_latency, L3_TLB_LATENCY, uns, uns, 30, )
+
+
+/* Page Walk Cache */
+//DEF_PARAM(pwc_entries, PWC_ENTRIES, uns, uns, 64, )
+//DEF_PARAM(pwc_assoc, PWC_ASSOC, uns, uns, 8, )
+//DEF_PARAM(pwc_hit_latency, PWC_HIT_LATENCY, uns, uns, 30, )
+DEF_PARAM(page_walk_latency, PAGE_WALK_LATENCY, uns, uns, 300, )
+
 /* MLC */
 DEF_PARAM(mlc_present, MLC_PRESENT, Flag, Flag, FALSE, )
 DEF_PARAM(mlc_size, MLC_SIZE, uns, uns, (512 * 1024), )

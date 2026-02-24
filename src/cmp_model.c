@@ -63,6 +63,7 @@
 #include "statistics.h"
 #include "topdown.h"
 #include "uop_queue_stage.h"
+#include "tlb.h"
 
 /**************************************************************************************/
 /* Global vars */
@@ -124,6 +125,7 @@ void cmp_init(uns mode) {
     init_exec_stage(proc_id, "EXEC");
     init_exec_ports(proc_id, "EXEC_PORTS");
     init_dcache_stage(proc_id, "DCACHE");
+    init_tlb(proc_id);
 
     /* initialize the common data structures */
     // Only one recovery info for all the BPs
@@ -419,30 +421,90 @@ void cmp_retire_hook(Op* op) {
   ft_free_op(op);
 }
 
-void warmup_uncore(uns proc_id, Addr addr, Flag write) {
-  Addr dummy_line_addr;
-  ASSERTM(0, !MLC_PRESENT, "Warmup for MLC not implemented\n");
+static void warmup_init_line_data(L1_Data* data, uns8 proc_id, Flag dirty) {
+  data->proc_id = proc_id;
+  data->dirty = dirty;
+  data->prefetch = FALSE;
+  data->seen_prefetch = FALSE;
+  data->pref_distance = 0;
+  data->pref_loadPC = 0;
+  data->global_hist = 0;
+  data->prefetcher_id = 0;
+  data->dcache_touch = FALSE;
+  data->fetched_by_offpath = FALSE;
+  data->l0_modified_fetched_by_offpath = FALSE;
+  data->offpath_op_addr = 0;
+  data->offpath_op_unique = 0;
+  data->mlc_miss_latency = 0;
+  data->l1miss_latency = 0;
+  data->fetch_cycle = 0;
+  data->onpath_use_cycle = 0;
+}
 
+static void warmup_llc_only(uns proc_id, Addr addr, Flag write) {
+  Addr dummy_line_addr;
   Cache* l1_cache = &(cmp_model.memory.uncores[proc_id].l1->cache);
-  L1_Data* l1_data = cache_access(l1_cache, addr, &dummy_line_addr, TRUE);
-  if (l1_data) {  // hit
+  L1_Data* l1_data = (L1_Data*)cache_access(l1_cache, addr, &dummy_line_addr, TRUE);
+
+  if (l1_data) {
     if (write)
       l1_data->dirty = TRUE;
-  } else {  // miss
-    Addr repl_line_addr;
-    Flag repl_line_valid;
-    get_next_repl_line(l1_cache, proc_id, addr, &repl_line_addr, &repl_line_valid);
-    STAT_EVENT(proc_id, NORESET_L1_FILL);
-    STAT_EVENT(proc_id, NORESET_L1_FILL_NONPREF);
-    if (repl_line_valid) {
-      uns repl_proc_id = get_proc_id_from_cmp_addr(repl_line_addr);
-      STAT_EVENT(repl_proc_id, NORESET_L1_EVICT);
-      STAT_EVENT(repl_proc_id, NORESET_L1_EVICT_NONPREF);
-    }
-    l1_data = (L1_Data*)cache_insert(l1_cache, proc_id, addr, &dummy_line_addr, &repl_line_addr);
-    l1_data->proc_id = proc_id;
-    l1_data->dirty = write;
+    return;
   }
+
+  Addr repl_line_addr;
+  Flag repl_line_valid;
+  get_next_repl_line(l1_cache, proc_id, addr, &repl_line_addr, &repl_line_valid);
+  STAT_EVENT(proc_id, NORESET_L1_FILL);
+  STAT_EVENT(proc_id, NORESET_L1_FILL_NONPREF);
+  if (repl_line_valid) {
+    uns repl_proc_id = get_proc_id_from_cmp_addr(repl_line_addr);
+    STAT_EVENT(repl_proc_id, NORESET_L1_EVICT);
+    STAT_EVENT(repl_proc_id, NORESET_L1_EVICT_NONPREF);
+  }
+
+  l1_data = (L1_Data*)cache_insert(l1_cache, proc_id, addr, &dummy_line_addr, &repl_line_addr);
+  warmup_init_line_data(l1_data, proc_id, write);
+}
+
+void warmup_uncore(uns proc_id, Addr addr, Flag write) {
+  Addr dummy_line_addr;
+
+  if (!MLC_PRESENT) {
+    warmup_llc_only(proc_id, addr, write);
+    if (L1_PART_SHADOW_WARMUP)
+      cache_part_l1_warmup(proc_id, addr);
+    return;
+  }
+
+  Cache* mlc_cache = &(cmp_model.memory.uncores[proc_id].mlc->cache);
+  MLC_Data* mlc_data = (MLC_Data*)cache_access(mlc_cache, addr, &dummy_line_addr, TRUE);
+
+  if (mlc_data) {
+    if (write)
+      mlc_data->dirty = TRUE;
+  } else {
+    // Demand miss: read path through LLC.
+    // WB miss: goes to MLC directly (do not probe/fill LLC directly).
+    if (!write) {
+      warmup_llc_only(proc_id, addr, FALSE);
+    }
+
+    // If MLC victim is dirty, emulate MLC->LLC writeback.
+    Addr mlc_repl_line_addr;
+    Flag mlc_repl_line_valid;
+    MLC_Data* mlc_victim =
+      (MLC_Data*)get_next_repl_line(mlc_cache, proc_id, addr, &mlc_repl_line_addr, &mlc_repl_line_valid);
+
+    if (mlc_repl_line_valid && !MLC_WRITE_THROUGH && mlc_victim->dirty) {
+      uns victim_proc_id = get_proc_id_from_cmp_addr(mlc_repl_line_addr);
+      warmup_llc_only(victim_proc_id, mlc_repl_line_addr, TRUE);
+    }
+
+    mlc_data = (MLC_Data*)cache_insert(mlc_cache, proc_id, addr, &dummy_line_addr, &mlc_repl_line_addr);
+    warmup_init_line_data(mlc_data, proc_id, write);
+  }
+
   if (L1_PART_SHADOW_WARMUP)
     cache_part_l1_warmup(proc_id, addr);
 }
@@ -470,6 +532,7 @@ void cmp_warmup(Op* op) {
     line_info = (Icache_Data*)cache_access(&ic->icache_line_info, ia, &dummy_line_addr2, TRUE);
 
   if (ic_data == NULL) {
+    //printf("IC Miss %llu %llu\n",ia, va);
     warmup_uncore(proc_id, ia, FALSE);
     Addr repl_line_addr;
     ic_data = (Inst_Info**)cache_insert(icache, proc_id, ia, &dummy_line_addr, &repl_line_addr);
@@ -481,6 +544,7 @@ void cmp_warmup(Op* op) {
       line_info->read_count[0] = 0;
     }
   } else {
+    //printf("IC Hit %llu %llu\n",ia, va);
     if (WP_COLLECT_STATS && FDIP_ENABLE) {
       ASSERT(proc_id, line_info);
       inc_cnt_useful(proc_id, dummy_line_addr, FALSE);
@@ -496,11 +560,13 @@ void cmp_warmup(Op* op) {
     Dcache_Data* dc_data = cache_access(dcache, va, &dummy_line_addr, TRUE);
     if (dc_data) {
       // set some fields to meet expectations of the simulation mode
+      //printf("DC Hit %llu %llu\n",ia, va);
       if (is_store)
         dc_data->dirty = TRUE;
       dc_data->read_count[0] += is_load;
       dc_data->write_count[0] += is_store;
     } else {
+      //printf("DC Miss %llu %llu\n",ia, va);
       warmup_uncore(proc_id, va, FALSE);
       Addr repl_line_addr;
       dc_data = (Dcache_Data*)cache_insert(dcache, proc_id, va, &dummy_line_addr, &repl_line_addr);
@@ -510,6 +576,11 @@ void cmp_warmup(Op* op) {
       dc_data->read_count[0] = is_load;
       dc_data->write_count[0] = is_store;
     }
+  }
+
+  tlb_warmup(proc_id, ia, TRUE);
+  if (is_load || is_store) {
+    tlb_warmup(proc_id, va, FALSE);
   }
 
   // Warmup BP for CF instructions
