@@ -113,6 +113,7 @@ Counter period_ID = 0;
 
 /* the global warmup dump flags */
 Flag* warmup_dump_done;
+Flag* warmup_dump_done_functional;
 
 time_t sim_start_time; /* the time that the simulator was started */
 
@@ -256,6 +257,8 @@ static inline void check_heartbeat(uns8 proc_id, Flag final) {
 
       switch (operating_mode) {
         case WARMUP_MODE:
+	  dump_stats(proc_id, TRUE, global_stat_array[proc_id], NUM_GLOBAL_STATS);
+          warmup_dump_done_functional[proc_id] = TRUE;
           fprintf(mystdout,
                   "** WARMUP End:   insts:%-10s  cycles:%-10s  time:%-18s  -- "
                   "%.2f IPC (%.2f IPC) --  N/A  KIPS (%.2f KIPS)\n",
@@ -454,6 +457,10 @@ void init_global_counter() {
 
   warmup_dump_done = (Flag*)malloc(sizeof(Flag) * NUM_CORES);
   memset(warmup_dump_done, 0, sizeof(Flag) * NUM_CORES);
+
+  warmup_dump_done_functional = (Flag*)malloc(sizeof(Flag) * NUM_CORES);
+  memset(warmup_dump_done_functional, 0, sizeof(Flag) * NUM_CORES);
+
 }
 
 /**************************************************************************************/
@@ -574,7 +581,7 @@ void uop_sim() {
             FATAL_ERROR(proc_id, "Access to 0x0\n");
           }
 
-          if (DUMP_TRACE && DEBUG_RANGE_COND(proc_id))
+          //if (DUMP_TRACE && DEBUG_RANGE_COND(proc_id))
             print_func_op(&op);
 
           op_count[proc_id]++;

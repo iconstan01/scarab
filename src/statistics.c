@@ -109,6 +109,13 @@ void gen_stat_output_file(char* buf, uns8 proc_id, Stat* stat, char csv) {
     sprintf(temp3, ".warmup");
     strncat(temp, temp3, 24);
   }
+
+  if (WARMUP && !warmup_dump_done_functional[proc_id]) {
+    char temp3[24];
+    sprintf(temp3, ".warmupV2");
+    strncat(temp, temp3, 24);
+  }
+
   if (roi_dump_began) {
     char temp3[24];
     sprintf(temp3, ".roi.%llu", roi_dump_ID);

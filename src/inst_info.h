@@ -86,6 +86,7 @@ struct Inst_Info_struct {
 
   Flag trigger_op_fetched_hook;  // if true, the op will trigger the model's fetch hook
   int extra_ld_latency;          // extra latency this load instruction should incurr
+  uns tlb_latency;		// extra TLB latency Edited by Ioannis
 
   struct Trace_Info_struct trace_info;  // trace_info;
 

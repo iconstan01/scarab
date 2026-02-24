@@ -29,7 +29,7 @@
   { __asm__ __volatile__("" ::: "memory"); }
 
 /* Note: If these values change, must update
- * the macros in src/pin/pin_exec/* as well. */
+ * the macros in src/pin/pin_exec/ as well. */
 #define SCARAB_MARKERS_PIN_BEGIN (1)
 #define SCARAB_MARKERS_PIN_END (2)
 
