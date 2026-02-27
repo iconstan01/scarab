@@ -314,22 +314,35 @@ void uop_cache_evict_FT(const Entry<Uop_Cache_Key, Uop_Cache_Data>& evicted_entr
   Uop_Cache_Stage_Cpp* uc_cpp = &per_core_uc_stage[uc->proc_id];
   FT_Info_Static evicted_ft_info_static = evicted_entry.key.second;
   Addr invalidate_addr = evicted_ft_info_static.start;
-  Entry<Uop_Cache_Key, Uop_Cache_Data> invalidated_entry{};
-
-  do {
-    invalidated_entry = uc_cpp->uop_cache->invalidate({invalidate_addr, evicted_ft_info_static});
+  // Keep the invalidation traversal bounded. Broken chains (missing/malformed entries)
+  // can otherwise spin forever when metadata is inconsistent.
+  for (uns evicted_lines = 0; evicted_lines < UOP_CACHE_ASSOC; evicted_lines++) {
+    Entry<Uop_Cache_Key, Uop_Cache_Data> invalidated_entry{};
     if (invalidate_addr == evicted_entry.key.first) {
-      // this was the one evicted at first
-      ASSERT(uc->proc_id, !invalidated_entry.valid);
       invalidated_entry = evicted_entry;
+    } else {
+      invalidated_entry = uc_cpp->uop_cache->invalidate({invalidate_addr, evicted_ft_info_static});
     }
-    invalidate_addr += invalidated_entry.data.offset;
+
+    if (!invalidated_entry.valid) {
+      break;
+    }
 
     if (invalidated_entry.data.used)
       STAT_EVENT(uc->proc_id, UOP_CACHE_LINE_EVICTED_USEFUL);
     else
       STAT_EVENT(uc->proc_id, UOP_CACHE_LINE_EVICTED_USELESS);
-  } while (!invalidated_entry.data.end_of_ft);
+
+    if (invalidated_entry.data.end_of_ft) {
+      break;
+    }
+
+    if (invalidated_entry.data.offset == 0) {
+      break;
+    }
+
+    invalidate_addr += invalidated_entry.data.offset;
+  }
 }
 
 void uop_cache_preallocate_space(const std::vector<Uop_Cache_Data>& inserting_FT, FT_Info inserting_FT_info) {
@@ -387,9 +400,10 @@ void uop_cache_insert_FT(const std::vector<Uop_Cache_Data> inserting_FT, FT_Info
     uop_cache_preallocate_space(inserting_FT, inserting_FT_info);
   }
 
-  for (const auto& it : inserting_FT) {
+  for (uns line_idx = 0; line_idx < inserting_FT.size(); line_idx++) {
+    const auto& it = inserting_FT[line_idx];
     Uop_Cache_Data* uop_cache_line =
-        (it == *first_line) ? first_lookup : uop_cache_lookup_line(it.line_start, inserting_FT_info, TRUE);
+        (line_idx == 0) ? first_lookup : uop_cache_lookup_line(it.line_start, inserting_FT_info, TRUE);
 
     /*
      * This line may already exist in the uop cache if the reuse distance in cycles is too short.
@@ -398,9 +412,33 @@ void uop_cache_insert_FT(const std::vector<Uop_Cache_Data> inserting_FT, FT_Info
      * As a result, the look-up above has updated the replacement policy, and we skip the insertion.
      */
     if (lines_exist) {
-      ASSERT(uc->proc_id, uop_cache_line && *uop_cache_line == it);
-      STAT_EVENT(uc->proc_id, UOP_CACHE_LINE_SHORT_REUSE_CONFLICTED_ON_PATH + off_path * UOP_CACHE_STAT_OFFSET);
-      continue;
+      if (uop_cache_line && *uop_cache_line == it) {
+        STAT_EVENT(uc->proc_id, UOP_CACHE_LINE_SHORT_REUSE_CONFLICTED_ON_PATH + off_path * UOP_CACHE_STAT_OFFSET);
+        continue;
+      }
+
+      // Partial/mismatched FT found: invalidate any stale remainder, then fall
+      // back to fresh insertion for this FT.
+      if (first_lookup) {
+        Uop_Cache_Key first_key = {first_line->line_start, inserting_FT_info.static_info};
+        Entry<Uop_Cache_Key, Uop_Cache_Data> invalidated_entry = uc_cpp->uop_cache->invalidate(first_key);
+        if (invalidated_entry.valid) {
+          uop_cache_evict_FT(invalidated_entry);
+        }
+      }
+      lines_exist = false;
+      first_lookup = nullptr;
+      uop_cache_preallocate_space(inserting_FT, inserting_FT_info);
+      uop_cache_line = uop_cache_lookup_line(it.line_start, inserting_FT_info, FALSE);
+    }
+
+    // If a stale line with the same key still exists, remove it and insert a
+    // fresh line for consistency.
+    if (uop_cache_line) {
+      Uop_Cache_Key stale_key = {it.line_start, inserting_FT_info.static_info};
+      Entry<Uop_Cache_Key, Uop_Cache_Data> stale_entry = uc_cpp->uop_cache->invalidate(stale_key);
+      ASSERT(uc->proc_id, stale_entry.valid);
+      uop_cache_line = nullptr;
     }
     ASSERT(uc->proc_id, !uop_cache_line);
 
