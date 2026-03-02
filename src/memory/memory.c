@@ -105,12 +105,49 @@ Counter Mem_Req_Priority[MRT_NUM_ELEMS];
 Counter Mem_Req_Priority_Offset[MRT_NUM_ELEMS];
 
 /**************************************************************************************/
+/* Local Helpers */
+
+static inline Mem_Queue* mlc_queue_for_proc(uns8 proc_id) {
+  return PRIVATE_MLC ? &mem->mlc_queues[proc_id] : &mem->mlc_queue;
+}
+
+static inline Mem_Queue* mlc_fill_queue_for_proc(uns8 proc_id) {
+  return PRIVATE_MLC ? &mem->mlc_fill_queues[proc_id] : &mem->mlc_fill_queue;
+}
+
+static inline uns total_mlc_queue_entries(void) {
+  if (!PRIVATE_MLC)
+    return mem->mlc_queue.entry_count;
+
+  uns total = 0;
+  for (uns proc_id = 0; proc_id < NUM_CORES; proc_id++) {
+    total += mem->mlc_queues[proc_id].entry_count;
+  }
+  return total;
+}
+
+static inline uns total_mlc_fill_queue_entries(void) {
+  if (!PRIVATE_MLC)
+    return mem->mlc_fill_queue.entry_count;
+
+  uns total = 0;
+  for (uns proc_id = 0; proc_id < NUM_CORES; proc_id++) {
+    total += mem->mlc_fill_queues[proc_id].entry_count;
+  }
+  return total;
+}
+
+/**************************************************************************************/
 /* Local Prototypes */
 
 static void init_mem_req_type_priorities(void);
 static void init_uncores(void);
 static void update_memory_queues(void);
 static void update_on_chip_memory_stats(void);
+static inline Mem_Queue* mlc_queue_for_proc(uns8 proc_id);
+static inline Mem_Queue* mlc_fill_queue_for_proc(uns8 proc_id);
+static inline uns total_mlc_queue_entries(void);
+static inline uns total_mlc_fill_queue_entries(void);
 
 static void mark_ops_as_l1_miss(Mem_Req* req);
 static void mark_l1_miss_deps(Op* op);
@@ -122,7 +159,7 @@ void mem_start_mlc_access(Mem_Req* req);
 static void mem_process_core_fill_reqs(uns proc_id);
 Flag mem_process_mlc_hit_access(Mem_Req* req, Mem_Queue_Entry* mlc_queue_entry, Addr* line_addr, MLC_Data* data,
                                 int lruu_position);
-static void mem_process_mlc_fill_reqs(void);
+static void mem_process_mlc_fill_reqs(uns8 proc_id);
 void mem_start_l1_access(Mem_Req* req);
 Flag mem_process_l1_hit_access(Mem_Req* req, Mem_Queue_Entry* l1_queue_entry, Addr* line_addr, L1_Data* data,
                                int lruu_position);
@@ -142,7 +179,7 @@ static inline Mem_Queue_Entry* mem_insert_req_into_queue(Mem_Req* new_req, Mem_Q
 static inline Flag insert_new_req_into_l1_queue(uns proc_id, Mem_Req* new_req);
 static inline Flag insert_new_req_into_mlc_queue(uns proc_id, Mem_Req* new_req);
 
-static void mem_process_mlc_reqs(void);
+static void mem_process_mlc_reqs(uns8 proc_id);
 static void mem_process_l1_reqs(void);
 
 static inline Mem_Req* mem_search_queue(Mem_Queue* queue, uns8 proc_id, Addr addr, Mem_Req_Type type, uns size,
@@ -317,6 +354,18 @@ void init_memory() {
   init_mem_queue(&mem->mlc_queue, "MLC_QUEUE", QUEUE_MLC_SIZE == 0 ? mem->total_mem_req_buffers : QUEUE_MLC_SIZE,
                  QUEUE_MLC);
   init_mem_queue(&mem->mlc_fill_queue, "MLC_FILL_QUEUE", mem->total_mem_req_buffers, QUEUE_MLC_FILL);
+  if (PRIVATE_MLC) {
+    mem->mlc_queues = (Mem_Queue*)calloc(NUM_CORES, sizeof(Mem_Queue));
+    mem->mlc_fill_queues = (Mem_Queue*)calloc(NUM_CORES, sizeof(Mem_Queue));
+    for (proc_id = 0; proc_id < NUM_CORES; proc_id++) {
+      char buf[MAX_STR_LENGTH + 1];
+      sprintf(buf, "MLC_QUEUE_%d", proc_id);
+      init_mem_queue(&mem->mlc_queues[proc_id], buf,
+                     QUEUE_MLC_SIZE == 0 ? mem->total_mem_req_buffers : QUEUE_MLC_SIZE, QUEUE_MLC);
+      sprintf(buf, "MLC_FILL_QUEUE_%d", proc_id);
+      init_mem_queue(&mem->mlc_fill_queues[proc_id], buf, mem->total_mem_req_buffers, QUEUE_MLC_FILL);
+    }
+  }
   init_mem_queue(&mem->l1_queue, "L1_QUEUE", QUEUE_L1_SIZE == 0 ? mem->total_mem_req_buffers : QUEUE_L1_SIZE, QUEUE_L1);
   init_mem_queue(&mem->bus_out_queue, "BUS_OUT_QUEUE",
                  QUEUE_BUS_OUT_SIZE == 0 ? mem->total_mem_req_buffers : QUEUE_BUS_OUT_SIZE, QUEUE_BUS_OUT);
@@ -364,18 +413,40 @@ void init_memory() {
 void init_uncores(void) {
   mem->uncores = (Uncore*)malloc(sizeof(Uncore) * NUM_CORES);
 
-  /* Initialize MLC cache (shared only for now) */
-  Ported_Cache* mlc = (Ported_Cache*)malloc(sizeof(Ported_Cache));
-  init_cache(&mlc->cache, "MLC_CACHE", MLC_SIZE, MLC_ASSOC, MLC_LINE_SIZE, sizeof(MLC_Data), MLC_CACHE_REPL_POLICY);
-  mlc->num_banks = MLC_BANKS;
-  mlc->ports = (Ports*)malloc(sizeof(Ports) * mlc->num_banks);
-  for (uns ii = 0; ii < mlc->num_banks; ii++) {
-    char name[MAX_STR_LENGTH + 1];
-    snprintf(name, MAX_STR_LENGTH, "MLC BANK %d PORTS", ii);
-    init_ports(&mlc->ports[ii], name, MLC_READ_PORTS, MLC_WRITE_PORTS, FALSE);
-  }
-  for (uns proc_id = 0; proc_id < NUM_CORES; proc_id++) {
-    MLC(proc_id) = mlc;
+  if (PRIVATE_MLC) {
+    ASSERTM(0, MLC_SIZE % NUM_CORES == 0, "Total MLC_SIZE must be a multiple of NUM_CORES if PRIVATE_MLC is on\n");
+    ASSERTM(0, MLC_BANKS % NUM_CORES == 0, "Total MLC_BANKS must be a multiple of NUM_CORES if PRIVATE_MLC is on\n");
+    for (uns proc_id = 0; proc_id < NUM_CORES; proc_id++) {
+      Ported_Cache* mlc = (Ported_Cache*)malloc(sizeof(Ported_Cache));
+
+      char buf[MAX_STR_LENGTH + 1];
+      sprintf(buf, "MLC[%d]", proc_id);
+      init_cache(&mlc->cache, buf, MLC_SIZE / NUM_CORES, MLC_ASSOC, MLC_LINE_SIZE, sizeof(MLC_Data),
+                 MLC_CACHE_REPL_POLICY);
+
+      mlc->num_banks = MLC_BANKS / NUM_CORES;
+      mlc->ports = (Ports*)malloc(sizeof(Ports) * mlc->num_banks);
+      for (uns ii = 0; ii < mlc->num_banks; ii++) {
+        char name[MAX_STR_LENGTH + 1];
+        snprintf(name, MAX_STR_LENGTH, "MLC[%d] BANK %d PORTS", proc_id, ii);
+        init_ports(&mlc->ports[ii], name, MLC_READ_PORTS, MLC_WRITE_PORTS, FALSE);
+      }
+      MLC(proc_id) = mlc;
+    }
+  } else {
+    /* Initialize MLC cache (shared only for now) */
+    Ported_Cache* mlc = (Ported_Cache*)malloc(sizeof(Ported_Cache));
+    init_cache(&mlc->cache, "MLC_CACHE", MLC_SIZE, MLC_ASSOC, MLC_LINE_SIZE, sizeof(MLC_Data), MLC_CACHE_REPL_POLICY);
+    mlc->num_banks = MLC_BANKS;
+    mlc->ports = (Ports*)malloc(sizeof(Ports) * mlc->num_banks);
+    for (uns ii = 0; ii < mlc->num_banks; ii++) {
+      char name[MAX_STR_LENGTH + 1];
+      snprintf(name, MAX_STR_LENGTH, "MLC BANK %d PORTS", ii);
+      init_ports(&mlc->ports[ii], name, MLC_READ_PORTS, MLC_WRITE_PORTS, FALSE);
+    }
+    for (uns proc_id = 0; proc_id < NUM_CORES; proc_id++) {
+      MLC(proc_id) = mlc;
+    }
   }
 
   /* Initialize LLC */
@@ -466,10 +537,23 @@ void reset_memory() {
   clear_list(&mem->req_buffer_free_list);
 
   mem->l1_queue.entry_count = 0;
+  mem->l1_queue.reserved_entry_count = 0;
   mem->mlc_queue.entry_count = 0;
+  mem->mlc_queue.reserved_entry_count = 0;
   mem->bus_out_queue.entry_count = 0;
+  mem->bus_out_queue.reserved_entry_count = 0;
   mem->l1fill_queue.entry_count = 0;
+  mem->l1fill_queue.reserved_entry_count = 0;
   mem->mlc_fill_queue.entry_count = 0;
+  mem->mlc_fill_queue.reserved_entry_count = 0;
+  if (PRIVATE_MLC) {
+    for (ii = 0; ii < NUM_CORES; ii++) {
+      mem->mlc_queues[ii].entry_count = 0;
+      mem->mlc_queues[ii].reserved_entry_count = 0;
+      mem->mlc_fill_queues[ii].entry_count = 0;
+      mem->mlc_fill_queues[ii].reserved_entry_count = 0;
+    }
+  }
 
   for (ii = 0; ii < mem->total_mem_req_buffers; ii++) {
     int* free_list_entry = sl_list_add_tail(&mem->req_buffer_free_list);
@@ -655,8 +739,15 @@ void print_mem_queue(Mem_Queue_Type queue_type) {
   if (queue_type & QUEUE_L1)
     print_mem_queue_generic(&(mem->l1_queue));
 
-  if (queue_type & QUEUE_MLC)
-    print_mem_queue_generic(&(mem->mlc_queue));
+  if (queue_type & QUEUE_MLC) {
+    if (PRIVATE_MLC) {
+      for (uns proc_id = 0; proc_id < NUM_CORES; proc_id++) {
+        print_mem_queue_generic(mlc_queue_for_proc(proc_id));
+      }
+    } else {
+      print_mem_queue_generic(&(mem->mlc_queue));
+    }
+  }
 
   if (queue_type & QUEUE_BUS_OUT)
     print_mem_queue_generic(&(mem->bus_out_queue));
@@ -666,8 +757,15 @@ void print_mem_queue(Mem_Queue_Type queue_type) {
   if (queue_type & QUEUE_L1FILL)
     print_mem_queue_generic(&(mem->l1fill_queue));
 
-  if (queue_type & QUEUE_MLC_FILL)
-    print_mem_queue_generic(&(mem->mlc_fill_queue));
+  if (queue_type & QUEUE_MLC_FILL) {
+    if (PRIVATE_MLC) {
+      for (uns proc_id = 0; proc_id < NUM_CORES; proc_id++) {
+        print_mem_queue_generic(mlc_fill_queue_for_proc(proc_id));
+      }
+    } else {
+      print_mem_queue_generic(&(mem->mlc_fill_queue));
+    }
+  }
 
   if (queue_type & QUEUE_CORE_FILL)
     print_mem_queue_generic(&(mem->core_fill_queues[0]));
@@ -729,10 +827,10 @@ void debug_memory() {
   DPRINTF("# MEMORY\n");
   DPRINTF("reqbuf_used_count:    %d\n", mem->req_count);
   DPRINTF("reqbuf_free_count:    %d\n", mem->req_buffer_free_list.count);
-  DPRINTF("mlc_queue_count:      %d\n", mem->mlc_queue.entry_count);
+  DPRINTF("mlc_queue_count:      %d\n", total_mlc_queue_entries());
   DPRINTF("l1_queue_count:       %d\n", mem->l1_queue.entry_count);
   DPRINTF("bus_out_queue_count:  %d\n", mem->bus_out_queue.entry_count);
-  DPRINTF("mlc_fill_queue_count: %d\n", mem->mlc_fill_queue.entry_count);
+  DPRINTF("mlc_fill_queue_count: %d\n", total_mlc_fill_queue_entries());
   DPRINTF("l1fill_queue_count:   %d\n", mem->l1fill_queue.entry_count);
 
   print_mem_queue(QUEUE_L1 | QUEUE_BUS_OUT | QUEUE_L1FILL | QUEUE_MLC | QUEUE_MLC_FILL);
@@ -744,7 +842,7 @@ void debug_memory() {
 
 static inline void queue_sanity_check(int location) {
   int queue_count = mem->l1_queue.entry_count + mem->bus_out_queue.entry_count + mem->l1fill_queue.entry_count +
-                    mem->mlc_queue.entry_count + mem->mlc_fill_queue.entry_count;
+                    total_mlc_queue_entries() + total_mlc_fill_queue_entries();
 
   ASSERTM(0, mem->req_count == queue_count, "rc:%d l1:%d bo:%d lf:%d loc:%d\n", mem->req_count,
           mem->l1_queue.entry_count, mem->bus_out_queue.entry_count, mem->l1fill_queue.entry_count, location);
@@ -775,7 +873,14 @@ void update_memory_queues() {
   }
 
   if (!ALL_FIFO_QUEUES && (cycle_mlcq_insert_count > 0)) {
-    qsort(mem->mlc_queue.base, mem->mlc_queue.entry_count, sizeof(Mem_Queue_Entry), mem_compare_priority);
+    if (PRIVATE_MLC) {
+      for (uns proc_id = 0; proc_id < NUM_CORES; proc_id++) {
+        Mem_Queue* mlc_queue = mlc_queue_for_proc(proc_id);
+        qsort(mlc_queue->base, mlc_queue->entry_count, sizeof(Mem_Queue_Entry), mem_compare_priority);
+      }
+    } else {
+      qsort(mem->mlc_queue.base, mem->mlc_queue.entry_count, sizeof(Mem_Queue_Entry), mem_compare_priority);
+    }
     cycle_mlcq_insert_count = 0;
   }
 
@@ -817,7 +922,13 @@ void update_memory() {
     update_memory_queues();
     update_on_chip_memory_stats();
 
-    mem_process_mlc_fill_reqs();
+    if (PRIVATE_MLC) {
+      for (uns proc_id = 0; proc_id < NUM_CORES; proc_id++) {
+        mem_process_mlc_fill_reqs(proc_id);
+      }
+    } else {
+      mem_process_mlc_fill_reqs(0);
+    }
     mem_process_l1_fill_reqs();
   }
 
@@ -833,7 +944,13 @@ void update_memory() {
 
     mem_process_bus_out_reqs();
     mem_process_l1_reqs();
-    mem_process_mlc_reqs();
+    if (PRIVATE_MLC) {
+      for (uns proc_id = 0; proc_id < NUM_CORES; proc_id++) {
+        mem_process_mlc_reqs(proc_id);
+      }
+    } else {
+      mem_process_mlc_reqs(0);
+    }
   }
 
   for (uns proc_id = 0; proc_id < NUM_CORES; proc_id++) {
@@ -1022,7 +1139,7 @@ Flag mem_process_l1_hit_access(Mem_Req* req, Mem_Queue_Entry* l1_queue_entry, Ad
     req->state = MRS_FILL_MLC;
     req->rdy_cycle = cycle_count + 1;
     // insert into mlc queue
-    req->queue = &(mem->mlc_fill_queue);
+    req->queue = mlc_fill_queue_for_proc(req->proc_id);
     if (!ORDER_BEYOND_BUS)
       mem_insert_req_into_queue(req, req->queue, ALL_FIFO_QUEUES ? mlc_fill_seq_num : l1_queue_entry->priority);
     else
@@ -1663,7 +1780,7 @@ static Flag mem_complete_mlc_access(Mem_Req* req, Mem_Queue_Entry* mlc_queue_ent
     Flag mlc_miss_access = mem_process_mlc_miss_access(req, mlc_queue_entry, &line_addr, data);
     if (mlc_miss_access && mlc_miss_send_l1) {
       DEBUG(req->proc_id, "mlc miss request is inserted to l1 queue rc:%d mlc:%d bo:%d lf:%d\n", mem->req_count,
-            mem->mlc_queue.entry_count, mem->l1_queue.entry_count, mem->mlc_fill_queue.entry_count);
+            total_mlc_queue_entries(), mem->l1_queue.entry_count, total_mlc_fill_queue_entries());
 
       req->queue = &(mem->l1_queue);
       // queue full check is done in mem_process_mlc_miss_access
@@ -1779,19 +1896,21 @@ static void mem_process_l1_reqs() {
 /* mem_process_mlc_reqs: */
 /* Access MLC if port is ready - If MLC miss, then put the request into miss queue */
 
-static void mem_process_mlc_reqs() {
+static void mem_process_mlc_reqs(uns8 proc_id) {
   Mem_Req* req = NULL;
+  Mem_Queue* mlc_queue = mlc_queue_for_proc(proc_id);
+  Mem_Queue* mlc_fill_queue = mlc_fill_queue_for_proc(proc_id);
   int ii;
   int reqbuf_id;
   int mlc_queue_removal_count = 0;
   int l1_queue_insertion_count = 0;
   int mlc_queue_reserve_entry_count = 0;
 
-  INC_STAT_EVENT(0, MLC_QUEUE_OCCUPANCY, mem->l1_queue.entry_count);
+  INC_STAT_EVENT(PRIVATE_MLC ? proc_id : 0, MLC_QUEUE_OCCUPANCY, mlc_queue->entry_count);
   /* Go thru the mlc_queue and try to access MLC for each request */
 
-  for (ii = 0; ii < mem->mlc_queue.entry_count; ii++) {
-    reqbuf_id = mem->mlc_queue.base[ii].reqbuf;
+  for (ii = 0; ii < mlc_queue->entry_count; ii++) {
+    reqbuf_id = mlc_queue->base[ii].reqbuf;
     req = &(mem->req_buffer[reqbuf_id]);
 
     // this is just a print
@@ -1800,8 +1919,8 @@ static void mem_process_mlc_reqs() {
     }
 
     ASSERTM(req->proc_id, req->state != MRS_INV, "id:%d state:%s type:%s rc:%d mlc:%d l1:%d mf:%d\n", req->id,
-            mem_req_state_names[req->state], Mem_Req_Type_str(req->type), mem->req_count, mem->mlc_queue.entry_count,
-            mem->l1_queue.entry_count, mem->mlc_fill_queue.entry_count);
+            mem_req_state_names[req->state], Mem_Req_Type_str(req->type), mem->req_count, mlc_queue->entry_count,
+            mem->l1_queue.entry_count, mlc_fill_queue->entry_count);
 
     /* if the request is not yet ready, then try the next one */
     if (cycle_count < req->rdy_cycle)
@@ -1821,10 +1940,9 @@ static void mem_process_mlc_reqs() {
         STAT_EVENT(req->proc_id, MLC_DEMAND_ACCESS);
     } else {
       ASSERTM(req->proc_id, req->state == MRS_MLC_WAIT, "id:%d state:%s type:%s rc:%d mlc:%d l1:%d mf:%d\n", req->id,
-              mem_req_state_names[req->state], Mem_Req_Type_str(req->type), mem->req_count, mem->mlc_queue.entry_count,
-              mem->l1_queue.entry_count, mem->mlc_fill_queue.entry_count);
-      if (mem_complete_mlc_access(req, &(mem->mlc_queue.base[ii]), &l1_queue_insertion_count,
-                                  &mlc_queue_reserve_entry_count))
+              mem_req_state_names[req->state], Mem_Req_Type_str(req->type), mem->req_count, mlc_queue->entry_count,
+              mem->l1_queue.entry_count, mlc_fill_queue->entry_count);
+      if (mem_complete_mlc_access(req, &(mlc_queue->base[ii]), &l1_queue_insertion_count, &mlc_queue_reserve_entry_count))
         mlc_queue_removal_count++;
     }
   }
@@ -1837,13 +1955,13 @@ static void mem_process_mlc_reqs() {
     /* After this sort requests that should be removed will be at the tail of
      * the mlc_queue */
     DEBUG(0, "mlc_queue removal\n");
-    qsort(mem->mlc_queue.base, mem->mlc_queue.entry_count, sizeof(Mem_Queue_Entry), mem_compare_priority);
-    mem->mlc_queue.entry_count -= mlc_queue_removal_count;
-    ASSERT(req->proc_id, mem->mlc_queue.entry_count >= 0);
+    qsort(mlc_queue->base, mlc_queue->entry_count, sizeof(Mem_Queue_Entry), mem_compare_priority);
+    mlc_queue->entry_count -= mlc_queue_removal_count;
+    ASSERT(req->proc_id, mlc_queue->entry_count >= 0);
     /* if HIER_MSHR_ON, requests stay in the queues until filled (by reserving
      * entries) */
     if (HIER_MSHR_ON) {
-      mem->mlc_queue.reserved_entry_count += mlc_queue_reserve_entry_count;
+      mlc_queue->reserved_entry_count += mlc_queue_reserve_entry_count;
     }
   }
 
@@ -2253,7 +2371,7 @@ static void mem_process_l1_fill_reqs() {
     } else if (req->state == MRS_FILL_MLC) {
       ASSERT(req->proc_id, MLC_PRESENT);
       // insert into mlc queue
-      req->queue = &(mem->mlc_fill_queue);
+      req->queue = mlc_fill_queue_for_proc(req->proc_id);
       if (!ORDER_BEYOND_BUS)
         mem_insert_req_into_queue(req, req->queue,
                                   ALL_FIFO_QUEUES ? mlc_fill_seq_num : mem->l1fill_queue.base[ii].priority);
@@ -2304,16 +2422,18 @@ static void mem_process_l1_fill_reqs() {
 /**************************************************************************************/
 /* mem_process_mlc_fill_reqs: */
 
-static void mem_process_mlc_fill_reqs() {
+static void mem_process_mlc_fill_reqs(uns8 proc_id) {
   Mem_Req* req;
+  Mem_Queue* mlc_queue = mlc_queue_for_proc(proc_id);
+  Mem_Queue* mlc_fill_queue = mlc_fill_queue_for_proc(proc_id);
   int ii;
   int reqbuf_id;
   int mlc_fill_queue_removal_count = 0;
 
   /* Go thru the mlc_fill_queue */
 
-  for (ii = 0; ii < mem->mlc_fill_queue.entry_count; ii++) {
-    reqbuf_id = mem->mlc_fill_queue.base[ii].reqbuf;
+  for (ii = 0; ii < mlc_fill_queue->entry_count; ii++) {
+    reqbuf_id = mlc_fill_queue->base[ii].reqbuf;
     req = &(mem->req_buffer[reqbuf_id]);
 
     ASSERT(req->proc_id, req->state != MRS_INV);
@@ -2346,7 +2466,7 @@ static void mem_process_mlc_fill_reqs() {
 
         // remove from mlc_fill queue - how do we handle this now?
         mlc_fill_queue_removal_count++;
-        mem->mlc_fill_queue.base[ii].priority = Mem_Req_Priority_Offset[MRT_MIN_PRIORITY];
+        mlc_fill_queue->base[ii].priority = Mem_Req_Priority_Offset[MRT_MIN_PRIORITY];
       }
     }
   }
@@ -2356,13 +2476,13 @@ static void mem_process_mlc_fill_reqs() {
     /* After this sort requests that should be removed will be at the tail of
      * the mlc_queue */
     DEBUG(0, "mlc_fill_queue removal\n");
-    qsort(mem->mlc_fill_queue.base, mem->mlc_fill_queue.entry_count, sizeof(Mem_Queue_Entry), mem_compare_priority);
-    mem->mlc_fill_queue.entry_count -= mlc_fill_queue_removal_count;
-    ASSERT(req->proc_id, mem->mlc_fill_queue.entry_count >= 0);
+    qsort(mlc_fill_queue->base, mlc_fill_queue->entry_count, sizeof(Mem_Queue_Entry), mem_compare_priority);
+    mlc_fill_queue->entry_count -= mlc_fill_queue_removal_count;
+    ASSERT(req->proc_id, mlc_fill_queue->entry_count >= 0);
     /* free corresponding reserved entries in the MLC queue if HIER_MSHR_ON */
     if (HIER_MSHR_ON) {
-      mem->mlc_queue.reserved_entry_count -= mlc_fill_queue_removal_count;
-      ASSERT(0, mem->mlc_queue.reserved_entry_count >= 0);
+      mlc_queue->reserved_entry_count -= mlc_fill_queue_removal_count;
+      ASSERT(0, mlc_queue->reserved_entry_count >= 0);
     }
   }
 }
@@ -2584,7 +2704,8 @@ static inline Mem_Req* mem_search_reqbuf(
           proc_id, get_proc_id_from_cmp_addr(addr));
 
   if (queues_to_search & QUEUE_MLC_FILL) {
-    req = mem_search_queue(&mem->mlc_fill_queue, proc_id, addr, type, size, demand_hit_prefetch, demand_hit_writeback,
+    req = mem_search_queue(mlc_fill_queue_for_proc(proc_id), proc_id, addr, type, size, demand_hit_prefetch,
+                           demand_hit_writeback,
                            queue_entry, TRUE);
     if (req)
       return req;
@@ -2633,7 +2754,8 @@ static inline Mem_Req* mem_search_reqbuf(
   }
 
   if (queues_to_search & QUEUE_MLC) {
-    req = mem_search_queue(&mem->mlc_queue, proc_id, addr, type, size, demand_hit_prefetch, demand_hit_writeback,
+    req = mem_search_queue(mlc_queue_for_proc(proc_id), proc_id, addr, type, size, demand_hit_prefetch,
+                           demand_hit_writeback,
                            queue_entry, TRUE);
     if (req)
       return req;
@@ -3171,7 +3293,7 @@ static void mem_init_new_req(Mem_Req* new_req, Mem_Req_Type type, Mem_Queue_Type
     new_req->fdip_emitted_cycle = 0;
   }
   mem_req_set_types(new_req, type);
-  new_req->queue = to_mlc ? &mem->mlc_queue : &mem->l1_queue;
+  new_req->queue = to_mlc ? mlc_queue_for_proc(proc_id) : &mem->l1_queue;
   new_req->proc_id = proc_id;
   new_req->addr = addr;
   new_req->phys_addr = addr_translate(addr);
@@ -3295,20 +3417,21 @@ static inline Mem_Queue_Entry* mem_insert_req_into_queue(Mem_Req* new_req, Mem_Q
     print_mem_queue(QUEUE_L1 | QUEUE_BUS_OUT | QUEUE_MEM | QUEUE_L1FILL | QUEUE_MLC | QUEUE_MLC_FILL);
   }
   ASSERTM(new_req->proc_id, queue->entry_count < (queue->size - queue->reserved_entry_count),
-          "name:%s  count:%d  size:%d  reserved:%d  reqbuf:%d  rc:%d l1:%d "
-          "bo:%d lf:%d rf:%d\n",
+          "name:%s  count:%d  size:%d  reserved:%d  reqbuf:%d  rc:%d mlc:%d "
+          "l1:%d bo:%d lf:%d mf:%d rf:%d\n",
           queue->name, queue->entry_count, queue->size, queue->reserved_entry_count, new_req->id, mem->req_count,
-          mem->l1_queue.entry_count, mem->bus_out_queue.entry_count, mem->l1fill_queue.entry_count,
-          mem->req_buffer_free_list.count);
+          total_mlc_queue_entries(), mem->l1_queue.entry_count, mem->bus_out_queue.entry_count,
+          mem->l1fill_queue.entry_count, total_mlc_fill_queue_entries(), mem->req_buffer_free_list.count);
 
   Mem_Queue_Entry* new_entry = &queue->base[queue->entry_count];
   new_entry->reqbuf = new_req->id;
   new_entry->priority = priority > 0 ? priority : new_req->priority;
   queue->entry_count++;
 
-  DEBUG(new_req->proc_id, "Inserted into %s index:%d pri:%s rc:%d l1:%d bo:%d lf:%d\n", queue->name, new_req->id,
-        unsstr64(priority > 0 ? priority : new_req->priority), mem->req_count, mem->l1_queue.entry_count,
-        mem->bus_out_queue.entry_count, mem->l1fill_queue.entry_count);
+  DEBUG(new_req->proc_id, "Inserted into %s index:%d pri:%s rc:%d mlc:%d l1:%d bo:%d lf:%d mf:%d\n", queue->name,
+        new_req->id, unsstr64(priority > 0 ? priority : new_req->priority), mem->req_count, total_mlc_queue_entries(),
+        mem->l1_queue.entry_count, mem->bus_out_queue.entry_count, mem->l1fill_queue.entry_count,
+        total_mlc_fill_queue_entries());
   return new_entry;
 }
 
@@ -3390,9 +3513,10 @@ Flag new_mem_req(Mem_Req_Type type, uns8 proc_id, Addr addr, uns size, uns delay
       ASSERT(0, !ALLOW_TYPE_MATCHES);  // we rely on the adjust function always
                                        // returning true
       ASSERTM(0, ADDR_TRANSLATION == ADDR_TRANS_NONE, "MLC && HIER_MSHR_ON && ADDR_TRANSLATION not supported\n");
-      if (queue_full(&mem->mlc_queue))
+      Mem_Queue* mlc_queue = mlc_queue_for_proc(proc_id);
+      if (queue_full(mlc_queue))
         return FALSE;
-      mem->mlc_queue.reserved_entry_count += 1;
+      mlc_queue->reserved_entry_count += 1;
       matching_req->reserved_entry_count += 1;
     }
     STAT_EVENT(proc_id, MLC_NEWREQ_MATCHED_L2_PREF);
@@ -3410,7 +3534,7 @@ Flag new_mem_req(Mem_Req_Type type, uns8 proc_id, Addr addr, uns size, uns delay
   if (matching_req) {
     // Simulation inaccuracy: an L2-destined request can match a request in the
     // MLC queue, not the other way around
-    if (!to_mlc && (matching_req->queue == &mem->mlc_queue))
+    if (!to_mlc && matching_req->queue && matching_req->queue->type == QUEUE_MLC)
       STAT_EVENT(proc_id, L1_NEWREQ_MATCHED_MLC_REQ);
     // a DCache miss can match an L2 prefetch
     if (type == MRT_DPRF) {
@@ -3440,7 +3564,7 @@ Flag new_mem_req(Mem_Req_Type type, uns8 proc_id, Addr addr, uns size, uns delay
 
   /* Step 2.5: Check if there is space in the appropriate queue */
   if (to_mlc) {
-    if (queue_full(&mem->mlc_queue)) {
+    if (queue_full(mlc_queue_for_proc(proc_id))) {
       STAT_EVENT(proc_id, REJECTED_QUEUE_MLC);
       return FALSE;
     }
@@ -3484,8 +3608,8 @@ Flag new_mem_req(Mem_Req_Type type, uns8 proc_id, Addr addr, uns size, uns delay
       DEBUG(proc_id,
             "Request denied in mem buffer  addr:%s rc:%d mlc:%d l1:%d bo:%d "
             "lf:%d mf:%d rf:%d\n",
-            hexstr64s(addr), mem->req_count, mem->mlc_queue.entry_count, mem->l1_queue.entry_count,
-            mem->bus_out_queue.entry_count, mem->l1fill_queue.entry_count, mem->mlc_fill_queue.entry_count,
+            hexstr64s(addr), mem->req_count, total_mlc_queue_entries(), mem->l1_queue.entry_count,
+            mem->bus_out_queue.entry_count, mem->l1fill_queue.entry_count, total_mlc_fill_queue_entries(),
             mem->req_buffer_free_list.count);
       STAT_EVENT(proc_id, MEM_REQ_BUFFER_FULL);
       if ((type == MRT_IFETCH) || (type == MRT_DFETCH) || (type == MRT_DSTORE))
@@ -3602,7 +3726,7 @@ static Flag insert_new_req_into_l1_queue(uns proc_id, Mem_Req* new_req) {
 /* insert_new_req_into_mlc_queue: */
 
 static Flag insert_new_req_into_mlc_queue(uns proc_id, Mem_Req* new_req) {
-  if (queue_full(&mem->mlc_queue)) {
+  if (queue_full(mlc_queue_for_proc(proc_id))) {
     ASSERT(proc_id, 0);
   }
   mem_insert_req_into_queue(new_req, new_req->queue, ALL_FIFO_QUEUES ? mlc_seq_num : 0);
@@ -3656,7 +3780,7 @@ Flag new_mem_dc_wb_req(Mem_Req_Type type, uns8 proc_id, Addr addr, uns size, uns
 
   /* Step 2.5: Check if there is space in the appropriate queue */
   if (MLC_PRESENT) {
-    if (queue_full(&mem->mlc_queue)) {
+    if (queue_full(mlc_queue_for_proc(proc_id))) {
       STAT_EVENT(proc_id, REJECTED_QUEUE_MLC);
       return FALSE;
     }
@@ -3679,8 +3803,8 @@ Flag new_mem_dc_wb_req(Mem_Req_Type type, uns8 proc_id, Addr addr, uns size, uns
     DEBUG(proc_id,
           "Request denied in mem buffer  addr:%s rc:%d mlc:%d l1:%d bo:%d "
           "lf:%d mf:%d rf:%d\n",
-          hexstr64s(addr), mem->req_count, mem->mlc_queue.entry_count, mem->l1_queue.entry_count,
-          mem->bus_out_queue.entry_count, mem->l1fill_queue.entry_count, mem->mlc_fill_queue.entry_count,
+          hexstr64s(addr), mem->req_count, total_mlc_queue_entries(), mem->l1_queue.entry_count,
+          mem->bus_out_queue.entry_count, mem->l1fill_queue.entry_count, total_mlc_fill_queue_entries(),
           mem->req_buffer_free_list.count);
     STAT_EVENT(proc_id, MEM_REQ_BUFFER_FULL);
     if ((type == MRT_IFETCH) || (type == MRT_DFETCH) || (type == MRT_DSTORE))
@@ -3763,8 +3887,8 @@ static Flag new_mem_mlc_wb_req(Mem_Req_Type type, uns8 proc_id, Addr addr, uns s
     DEBUG(proc_id,
           "Request denied in mem buffer  addr:%s rc:%d mlc:%d l1:%d bo:%d "
           "lf:%d mf:%d rf:%d\n",
-          hexstr64s(addr), mem->req_count, mem->mlc_queue.entry_count, mem->l1_queue.entry_count,
-          mem->bus_out_queue.entry_count, mem->l1fill_queue.entry_count, mem->mlc_fill_queue.entry_count,
+          hexstr64s(addr), mem->req_count, total_mlc_queue_entries(), mem->l1_queue.entry_count,
+          mem->bus_out_queue.entry_count, mem->l1fill_queue.entry_count, total_mlc_fill_queue_entries(),
           mem->req_buffer_free_list.count);
     STAT_EVENT(proc_id, MEM_REQ_BUFFER_FULL);
     if ((type == MRT_IFETCH) || (type == MRT_DFETCH) || (type == MRT_DSTORE))
@@ -3876,8 +4000,8 @@ static Flag new_mem_l1_wb_req(Mem_Req_Type type, uns8 proc_id, Addr addr, uns si
       DEBUG(proc_id,
             "Request denied in mem buffer  addr:%s rc:%d mlc:%d l1:%d bo:%d "
             "lf:%d mf:%d rf:%d\n",
-            hexstr64s(addr), mem->req_count, mem->mlc_queue.entry_count, mem->l1_queue.entry_count,
-            mem->bus_out_queue.entry_count, mem->l1fill_queue.entry_count, mem->mlc_fill_queue.entry_count,
+            hexstr64s(addr), mem->req_count, total_mlc_queue_entries(), mem->l1_queue.entry_count,
+            mem->bus_out_queue.entry_count, mem->l1fill_queue.entry_count, total_mlc_fill_queue_entries(),
             mem->req_buffer_free_list.count);
       STAT_EVENT(proc_id, MEM_REQ_BUFFER_FULL);
       if ((type == MRT_IFETCH) || (type == MRT_DFETCH) || (type == MRT_DSTORE))
