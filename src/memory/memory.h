@@ -155,6 +155,8 @@ typedef struct Memory_struct {
   /* various queues (arrays) */
   Mem_Queue mlc_queue;
   Mem_Queue mlc_fill_queue;
+  Mem_Queue* mlc_queues;
+  Mem_Queue* mlc_fill_queues;
   Mem_Queue l1_queue;
   Mem_Queue bus_out_queue;
   Mem_Queue l1fill_queue;
