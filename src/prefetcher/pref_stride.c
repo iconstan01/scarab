@@ -94,20 +94,20 @@ void init_stride(HWP* hwp, Pref_Stride* stride_hwp) {
   stride_hwp->index_table = (Stride_Index_Table_Entry*)calloc(PREF_STRIDE_TABLE_N, sizeof(Stride_Index_Table_Entry));
 }
 void pref_stride_ul1_hit(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_hist) {
-  pref_stride_train(stride_prefetche_array.stride_hwp_ul1, lineAddr, loadPC, TRUE);
+  pref_stride_train(stride_prefetche_array.stride_hwp_ul1, proc_id, lineAddr, loadPC, TRUE);
 }
 
 void pref_stride_ul1_miss(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_hist) {
-  pref_stride_train(stride_prefetche_array.stride_hwp_ul1, lineAddr, loadPC, FALSE);
+  pref_stride_train(stride_prefetche_array.stride_hwp_ul1, proc_id, lineAddr, loadPC, FALSE);
 }
 void pref_stride_umlc_hit(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_hist) {
-  pref_stride_train(stride_prefetche_array.stride_hwp_umlc, lineAddr, loadPC, TRUE);
+  pref_stride_train(stride_prefetche_array.stride_hwp_umlc, proc_id, lineAddr, loadPC, TRUE);
 }
 
 void pref_stride_umlc_miss(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_hist) {
-  pref_stride_train(stride_prefetche_array.stride_hwp_umlc, lineAddr, loadPC, FALSE);
+  pref_stride_train(stride_prefetche_array.stride_hwp_umlc, proc_id, lineAddr, loadPC, FALSE);
 }
-void pref_stride_train(Pref_Stride* stride_hwp, Addr lineAddr, Addr loadPC, Flag is_hit) {
+void pref_stride_train(Pref_Stride* stride_hwp, uns8 proc_id, Addr lineAddr, Addr loadPC, Flag is_hit) {
   int ii;
   int region_idx = -1;
 
@@ -229,11 +229,11 @@ void pref_stride_train(Pref_Stride* stride_hwp, Addr lineAddr, Addr loadPC, Flag
       for (ii = 0; (ii < PREF_STRIDE_DEGREE && entry->pref_sent < PREF_STRIDE_DISTANCE); ii++, entry->pref_sent++) {
         pref_index = entry->pref_last_index + entry->stride[0];
         if (stride_hwp->type == UMLC) {
-          if (!pref_addto_umlc_req_queue(0, pref_index,
+          if (!pref_addto_umlc_req_queue(proc_id, pref_index,
                                          stride_hwp->hwp_info->id))  // FIXME
             break;
         } else {
-          if (!pref_addto_ul1req_queue(0, pref_index,
+          if (!pref_addto_ul1req_queue(proc_id, pref_index,
                                        stride_hwp->hwp_info->id))  // FIXME
             break;
         }  // q is full
@@ -253,11 +253,11 @@ void pref_stride_train(Pref_Stride* stride_hwp, Addr lineAddr, Addr loadPC, Flag
         if (entry->pref_count == entry->s_cnt[entry->pref_curr_state]) {
           pref_index = entry->pref_last_index + entry->strans[entry->pref_curr_state];
           if (stride_hwp->type == UMLC) {
-            if (!pref_addto_umlc_req_queue(0, pref_index,
+            if (!pref_addto_umlc_req_queue(proc_id, pref_index,
                                            stride_hwp->hwp_info->id))  // FIXME
               break;
           } else {
-            if (!pref_addto_ul1req_queue(0, pref_index,
+            if (!pref_addto_ul1req_queue(proc_id, pref_index,
                                          stride_hwp->hwp_info->id))  // FIXME
               break;
           }  // q is full
@@ -266,11 +266,11 @@ void pref_stride_train(Pref_Stride* stride_hwp, Addr lineAddr, Addr loadPC, Flag
         } else {
           pref_index = entry->pref_last_index + entry->stride[entry->pref_curr_state];
           if (stride_hwp->type == UMLC) {
-            if (!pref_addto_umlc_req_queue(0, pref_index,
+            if (!pref_addto_umlc_req_queue(proc_id, pref_index,
                                            stride_hwp->hwp_info->id))  // FIXME
               break;
           } else {
-            if (!pref_addto_ul1req_queue(0, pref_index,
+            if (!pref_addto_ul1req_queue(proc_id, pref_index,
                                          stride_hwp->hwp_info->id))  // FIXME
               break;
           }  // q is full

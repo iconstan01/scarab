@@ -68,8 +68,8 @@
    cache.
 */
 /*
- * This prefetcher is implemented in a unified way where all cores share the same prefetcher instance.
- * As a result, the proc_id received as a parameter is ignored.
+ * This prefetcher is implemented per core so each core trains and issues
+ * prefetches from its own predictor state.
  */
 /**************************************************************************************/
 /* Macros */
@@ -82,48 +82,51 @@ void pref_2dc_init(HWP* hwp) {
     return;
 
   if (PREF_UMLC_ON) {
-    tdc_prefetcher_array.tdc_hwp_umlc = (Pref_2DC*)malloc(sizeof(Pref_2DC));
-    tdc_prefetcher_array.tdc_hwp_umlc->type = UMLC;
-    init_2dc(hwp, tdc_prefetcher_array.tdc_hwp_umlc);
+    tdc_prefetcher_array.tdc_hwp_umlc = (Pref_2DC*)malloc(sizeof(Pref_2DC) * NUM_CORES);
+    init_2dc(hwp, tdc_prefetcher_array.tdc_hwp_umlc, UMLC);
   }
   if (PREF_UL1_ON) {
-    tdc_prefetcher_array.tdc_hwp_ul1 = (Pref_2DC*)malloc(sizeof(Pref_2DC));
-    tdc_prefetcher_array.tdc_hwp_ul1->type = UL1;
-    init_2dc(hwp, tdc_prefetcher_array.tdc_hwp_ul1);
+    tdc_prefetcher_array.tdc_hwp_ul1 = (Pref_2DC*)malloc(sizeof(Pref_2DC) * NUM_CORES);
+    init_2dc(hwp, tdc_prefetcher_array.tdc_hwp_ul1, UL1);
   }
 }
-void init_2dc(HWP* hwp, Pref_2DC* tdc_hwp_core) {
-  tdc_hwp_core->hwp_info = hwp->hwp_info;
-  tdc_hwp_core->hwp_info->enabled = TRUE;
+void init_2dc(HWP* hwp, Pref_2DC* tdc_hwp_core, CacheLevel type) {
+  uns8 proc_id;
 
-  tdc_hwp_core->regions = (Pref_2DC_Region*)calloc(PREF_2DC_NUM_REGIONS, sizeof(Pref_2DC_Region));
+  for (proc_id = 0; proc_id < NUM_CORES; proc_id++) {
+    tdc_hwp_core[proc_id].hwp_info = hwp->hwp_info;
+    tdc_hwp_core[proc_id].hwp_info->enabled = TRUE;
+    tdc_hwp_core[proc_id].type = type;
 
-  tdc_hwp_core->last_access = 0;
-  tdc_hwp_core->last_loadPC = 0;
+    tdc_hwp_core[proc_id].regions = (Pref_2DC_Region*)calloc(PREF_2DC_NUM_REGIONS, sizeof(Pref_2DC_Region));
 
-  init_cache(&tdc_hwp_core->cache, "PREF_2DC_CACHE", PREF_2DC_CACHE_SIZE, PREF_2DC_CACHE_ASSOC,
-             PREF_2DC_CACHE_LINE_SIZE, sizeof(Pref_2DC_Cache_Data), REPL_TRUE_LRU);
+    tdc_hwp_core[proc_id].last_access = 0;
+    tdc_hwp_core[proc_id].last_loadPC = 0;
 
-  tdc_hwp_core->cache_index_bits = LOG2(PREF_2DC_CACHE_SIZE / 4);
-  tdc_hwp_core->hash_func = PREF_2DC_HASH_FUNC_DEFAULT;
-  tdc_hwp_core->pref_degree = PREF_2DC_DEGREE;
+    init_cache(&tdc_hwp_core[proc_id].cache, "PREF_2DC_CACHE", PREF_2DC_CACHE_SIZE, PREF_2DC_CACHE_ASSOC,
+               PREF_2DC_CACHE_LINE_SIZE, sizeof(Pref_2DC_Cache_Data), REPL_TRUE_LRU);
+
+    tdc_hwp_core[proc_id].cache_index_bits = LOG2(PREF_2DC_CACHE_SIZE / 4);
+    tdc_hwp_core[proc_id].hash_func = PREF_2DC_HASH_FUNC_DEFAULT;
+    tdc_hwp_core[proc_id].pref_degree = PREF_2DC_DEGREE;
+  }
 }
 void pref_2dc_ul1_prefhit(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_hist) {
-  pref_2dc_train(tdc_prefetcher_array.tdc_hwp_ul1, lineAddr, loadPC, TRUE);  // FIXME
+  pref_2dc_train(&tdc_prefetcher_array.tdc_hwp_ul1[proc_id], proc_id, lineAddr, loadPC, TRUE);
 }
 
 void pref_2dc_ul1_miss(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_histC) {
-  pref_2dc_train(tdc_prefetcher_array.tdc_hwp_ul1, lineAddr, loadPC, FALSE);  // FIXME
+  pref_2dc_train(&tdc_prefetcher_array.tdc_hwp_ul1[proc_id], proc_id, lineAddr, loadPC, FALSE);
 }
 void pref_2dc_umlc_prefhit(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_hist) {
-  pref_2dc_train(tdc_prefetcher_array.tdc_hwp_umlc, lineAddr, loadPC, TRUE);  // FIXME
+  pref_2dc_train(&tdc_prefetcher_array.tdc_hwp_umlc[proc_id], proc_id, lineAddr, loadPC, TRUE);
 }
 
 void pref_2dc_umlc_miss(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_histC) {
-  pref_2dc_train(tdc_prefetcher_array.tdc_hwp_umlc, lineAddr, loadPC, FALSE);  // FIXME
+  pref_2dc_train(&tdc_prefetcher_array.tdc_hwp_umlc[proc_id], proc_id, lineAddr, loadPC, FALSE);
 }
 
-void pref_2dc_train(Pref_2DC* tdc_hwp, Addr lineAddr, Addr loadPC, Flag is_hit) {
+void pref_2dc_train(Pref_2DC* tdc_hwp, uns8 proc_id, Addr lineAddr, Addr loadPC, Flag is_hit) {
   int delta;
   Addr hash;
   Addr lineIndex = lineAddr >> LOG2(DCACHE_LINE_SIZE);
@@ -176,9 +179,9 @@ void pref_2dc_train(Pref_2DC* tdc_hwp, Addr lineAddr, Addr loadPC, Flag is_hit) 
       for (; num_pref_sent < tdc_hwp->pref_degree; num_pref_sent++) {
         lineIndex += region->deltaA;
         if (tdc_hwp->type == UMLC)
-          pref_addto_umlc_req_queue(0, lineIndex, tdc_hwp->hwp_info->id);
+          pref_addto_umlc_req_queue(proc_id, lineIndex, tdc_hwp->hwp_info->id);
         else
-          pref_addto_ul1req_queue_set(0, lineIndex, tdc_hwp->hwp_info->id, 0, loadPC, 0, FALSE);  // FIXME
+          pref_addto_ul1req_queue_set(proc_id, lineIndex, tdc_hwp->hwp_info->id, 0, loadPC, 0, FALSE);  // FIXME
       }
     }
     while (num_pref_sent < tdc_hwp->pref_degree) {
@@ -193,18 +196,18 @@ void pref_2dc_train(Pref_2DC* tdc_hwp, Addr lineAddr, Addr loadPC, Flag is_hit) 
       delta2 = data->delta;
 
       if (tdc_hwp->type == UMLC)
-        pref_addto_umlc_req_queue(0, lineIndex, tdc_hwp->hwp_info->id);
+        pref_addto_umlc_req_queue(proc_id, lineIndex, tdc_hwp->hwp_info->id);
       else
-        pref_addto_ul1req_queue_set(0, lineIndex, tdc_hwp->hwp_info->id, 0, loadPC, 0, FALSE);  // FIXME
+        pref_addto_ul1req_queue_set(proc_id, lineIndex, tdc_hwp->hwp_info->id, 0, loadPC, 0, FALSE);  // FIXME
       num_pref_sent++;
     }
   }
 }
 
-void pref_2dc_throttle(Pref_2DC* tdc_hwp) {
+void pref_2dc_throttle(Pref_2DC* tdc_hwp, uns8 proc_id) {
   int dyn_shift = 0;
 
-  float acc = pref_get_accuracy(0, tdc_hwp->hwp_info->id);
+  float acc = pref_get_accuracy(proc_id, tdc_hwp->hwp_info->id);
 
   if (acc != 1.0) {
     if (acc > PREF_ACC_THRESH_1) {
@@ -222,25 +225,25 @@ void pref_2dc_throttle(Pref_2DC* tdc_hwp) {
 
   // COLLECT STATS
   if (acc > 0.9) {
-    STAT_EVENT(0, PREF_ACC_1);
+    STAT_EVENT(proc_id, PREF_ACC_1);
   } else if (acc > 0.8) {
-    STAT_EVENT(0, PREF_ACC_2);
+    STAT_EVENT(proc_id, PREF_ACC_2);
   } else if (acc > 0.7) {
-    STAT_EVENT(0, PREF_ACC_3);
+    STAT_EVENT(proc_id, PREF_ACC_3);
   } else if (acc > 0.6) {
-    STAT_EVENT(0, PREF_ACC_4);
+    STAT_EVENT(proc_id, PREF_ACC_4);
   } else if (acc > 0.5) {
-    STAT_EVENT(0, PREF_ACC_5);
+    STAT_EVENT(proc_id, PREF_ACC_5);
   } else if (acc > 0.4) {
-    STAT_EVENT(0, PREF_ACC_6);
+    STAT_EVENT(proc_id, PREF_ACC_6);
   } else if (acc > 0.3) {
-    STAT_EVENT(0, PREF_ACC_7);
+    STAT_EVENT(proc_id, PREF_ACC_7);
   } else if (acc > 0.2) {
-    STAT_EVENT(0, PREF_ACC_8);
+    STAT_EVENT(proc_id, PREF_ACC_8);
   } else if (acc > 0.1) {
-    STAT_EVENT(0, PREF_ACC_9);
+    STAT_EVENT(proc_id, PREF_ACC_9);
   } else {
-    STAT_EVENT(0, PREF_ACC_10);
+    STAT_EVENT(proc_id, PREF_ACC_10);
   }
 
   if (acc == 1.0) {
@@ -248,19 +251,19 @@ void pref_2dc_throttle(Pref_2DC* tdc_hwp) {
   } else {
     if (dyn_shift >= 2) {
       tdc_hwp->pref_degree = 64;
-      STAT_EVENT(0, PREF_DISTANCE_5);
+      STAT_EVENT(proc_id, PREF_DISTANCE_5);
     } else if (dyn_shift == 1) {
       tdc_hwp->pref_degree = 32;
-      STAT_EVENT(0, PREF_DISTANCE_4);
+      STAT_EVENT(proc_id, PREF_DISTANCE_4);
     } else if (dyn_shift == 0) {
       tdc_hwp->pref_degree = 16;
-      STAT_EVENT(0, PREF_DISTANCE_3);
+      STAT_EVENT(proc_id, PREF_DISTANCE_3);
     } else if (dyn_shift == -1) {
       tdc_hwp->pref_degree = 8;
-      STAT_EVENT(0, PREF_DISTANCE_2);
+      STAT_EVENT(proc_id, PREF_DISTANCE_2);
     } else if (dyn_shift <= -2) {
       tdc_hwp->pref_degree = 2;
-      STAT_EVENT(0, PREF_DISTANCE_1);
+      STAT_EVENT(proc_id, PREF_DISTANCE_1);
     }
   }
 }
