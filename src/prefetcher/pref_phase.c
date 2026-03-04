@@ -61,32 +61,38 @@
 
 #define PAGENUM(x) (x >> PREF_PHASE_LOG2REGIONSIZE)
 
-Pref_PHASE* phase_hwp;
+Pref_PHASE* phase_hwp_core;
 
 FILE* PREF_PHASE_OUT;
 
 void pref_phase_init(HWP* hwp) {
-  int ii;
+  int  ii;
+  uns8 proc_id;
   static char* pref_phase_filename = "pref_phase";
 
   if (!PREF_PHASE_ON)
     return;
 
-  phase_hwp = (Pref_PHASE*)malloc(sizeof(Pref_PHASE));
-  phase_hwp->hwp_info = hwp->hwp_info;
-  phase_hwp->hwp_info->enabled = TRUE;
+  phase_hwp_core = (Pref_PHASE*)malloc(sizeof(Pref_PHASE) * NUM_CORES);
+  for (proc_id = 0; proc_id < NUM_CORES; proc_id++) {
+    phase_hwp_core[proc_id].hwp_info = hwp->hwp_info;
+    phase_hwp_core[proc_id].hwp_info->enabled = TRUE;
 
-  phase_hwp->phase_table = (PhaseInfoEntry*)calloc(PREF_PHASE_TABLE_SIZE, sizeof(PhaseInfoEntry));
+    phase_hwp_core[proc_id].phase_table = (PhaseInfoEntry*)calloc(PREF_PHASE_TABLE_SIZE, sizeof(PhaseInfoEntry));
 
-  for (ii = 0; ii < PREF_PHASE_TABLE_SIZE; ii++) {
-    phase_hwp->phase_table[ii].MemAccess = (Flag*)calloc(PREF_PHASE_INFOSIZE, sizeof(Flag));
-    phase_hwp->phase_table[ii].mapped_regions = (Phase_Region*)calloc(PREF_PHASE_TRACKEDREGIONS, sizeof(Phase_Region));
+    for (ii = 0; ii < PREF_PHASE_TABLE_SIZE; ii++) {
+      phase_hwp_core[proc_id].phase_table[ii].MemAccess = (Flag*)calloc(PREF_PHASE_INFOSIZE, sizeof(Flag));
+      phase_hwp_core[proc_id].phase_table[ii].mapped_regions =
+          (Phase_Region*)calloc(PREF_PHASE_TRACKEDREGIONS, sizeof(Phase_Region));
+    }
+    phase_hwp_core[proc_id].MemAccess = (Flag*)calloc(PREF_PHASE_INFOSIZE, sizeof(Flag));
+    phase_hwp_core[proc_id].mapped_regions = (Phase_Region*)calloc(PREF_PHASE_TRACKEDREGIONS, sizeof(Phase_Region));
+    phase_hwp_core[proc_id].interval_start = 0;
+    phase_hwp_core[proc_id].curr_phaseid = 0;
+    phase_hwp_core[proc_id].currsent_regid = 0;
+    phase_hwp_core[proc_id].currsent_regid_offset = 0;
+    phase_hwp_core[proc_id].num_misses = 0;
   }
-  phase_hwp->MemAccess = (Flag*)calloc(PREF_PHASE_INFOSIZE, sizeof(Flag));
-  phase_hwp->mapped_regions = (Phase_Region*)calloc(PREF_PHASE_TRACKEDREGIONS, sizeof(Phase_Region));
-  phase_hwp->interval_start = 0;
-  phase_hwp->curr_phaseid = 0;
-  phase_hwp->num_misses = 0;
 
   if (PREF_PHASE_STUDY) {
     PREF_PHASE_OUT = file_tag_fopen(NULL, pref_phase_filename, "w");
@@ -103,14 +109,15 @@ void pref_phase_ul1_hit(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_h
 }
 
 void pref_phase_ul1_prefhit(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_hist) {
-  pref_phase_ul1_train(lineAddr, loadPC, TRUE);  // FIXME
+  pref_phase_ul1_train(proc_id, lineAddr, loadPC, TRUE);  // FIXME
 }
 
 void pref_phase_ul1_miss(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_hist) {
-  pref_phase_ul1_train(lineAddr, loadPC, FALSE);  // FIXME
+  pref_phase_ul1_train(proc_id, lineAddr, loadPC, FALSE);  // FIXME
 }
 
-void pref_phase_ul1_train(Addr lineAddr, Addr loadPC, Flag pref_hit) {
+void pref_phase_ul1_train(uns8 proc_id, Addr lineAddr, Addr loadPC, Flag pref_hit) {
+  Pref_PHASE* phase_hwp = &phase_hwp_core[proc_id];
   int next_phaseid;
 
   Flag qFull = FALSE;
@@ -120,11 +127,11 @@ void pref_phase_ul1_train(Addr lineAddr, Addr loadPC, Flag pref_hit) {
   // Update access pattern
   phase_hwp->MemAccess[hashIndex] = TRUE;
 
-  pref_phase_updateregioninfo(phase_hwp->mapped_regions, lineIndex);
+  pref_phase_updateregioninfo(proc_id, phase_hwp->mapped_regions, lineIndex);
 
   phase_hwp->num_misses++;
-  if (inst_count[0] - phase_hwp->interval_start > PREF_PHASE_INTERVAL) {
-    phase_hwp->interval_start = inst_count[0];
+  if (inst_count[proc_id] - phase_hwp->interval_start > PREF_PHASE_INTERVAL) {
+    phase_hwp->interval_start = inst_count[proc_id];
     if (phase_hwp->num_misses > PREF_PHASE_MIN_MISSES) {
       if (PREF_PHASE_STUDY) {
         int ii;
@@ -135,8 +142,8 @@ void pref_phase_ul1_train(Addr lineAddr, Addr loadPC, Flag pref_hit) {
       }
 
       phase_hwp->num_misses = 0;
-      next_phaseid = pref_phase_computenextphase();
-      STAT_EVENT(0, PREF_PHASE_NEWPHASE_DET);
+      next_phaseid = pref_phase_computenextphase(phase_hwp);
+      STAT_EVENT(proc_id, PREF_PHASE_NEWPHASE_DET);
       {
         // Set the memAccess pattern for the next phase correctly
         Flag* tmp = phase_hwp->MemAccess;
@@ -155,7 +162,7 @@ void pref_phase_ul1_train(Addr lineAddr, Addr loadPC, Flag pref_hit) {
       }
 
       if (!phase_hwp->phase_table[next_phaseid].valid) {
-        STAT_EVENT(0, PREF_PHASE_NEWPHASE_NOTVALID);
+        STAT_EVENT(proc_id, PREF_PHASE_NEWPHASE_NOTVALID);
 
         phase_hwp->phase_table[next_phaseid].valid = TRUE;
         memset(phase_hwp->phase_table[next_phaseid].mapped_regions, 0,
@@ -178,12 +185,12 @@ void pref_phase_ul1_train(Addr lineAddr, Addr loadPC, Flag pref_hit) {
       for (; phase_hwp->currsent_regid_offset < PREF_PHASE_REGIONENTRIES; phase_hwp->currsent_regid_offset++) {
         if (region->RegionMemAccess[phase_hwp->currsent_regid_offset]) {
           lineIndex = startIndex + phase_hwp->currsent_regid_offset;
-          if (!pref_addto_ul1req_queue(0, lineIndex,
+          if (!pref_addto_ul1req_queue(proc_id, lineIndex,
                                        phase_hwp->hwp_info->id)) {  // FIXME
             qFull = TRUE;
             break;
           }
-          STAT_EVENT(0, PREF_PHASE_SENTPREF);
+          STAT_EVENT(proc_id, PREF_PHASE_SENTPREF);
         }
       }
       if (qFull)
@@ -194,7 +201,7 @@ void pref_phase_ul1_train(Addr lineAddr, Addr loadPC, Flag pref_hit) {
   }
 }
 
-void pref_phase_updateregioninfo(Phase_Region* mapped_regions, Addr lineAddr) {
+void pref_phase_updateregioninfo(uns8 proc_id, Phase_Region* mapped_regions, Addr lineAddr) {
   int ii, id;
   Addr pagenum = PAGENUM(lineAddr);
   int region_offset =
@@ -216,7 +223,7 @@ void pref_phase_updateregioninfo(Phase_Region* mapped_regions, Addr lineAddr) {
     memset(mapped_regions[id].RegionMemAccess, 0, sizeof(Flag) * PREF_PHASE_REGIONENTRIES);
   }
   if (mapped_regions[id].PageNumber != pagenum) {
-    STAT_EVENT(0, PREF_PHASE_OVERWRITE_PAGE);
+    STAT_EVENT(proc_id, PREF_PHASE_OVERWRITE_PAGE);
   }
   mapped_regions[id].PageNumber = pagenum;
   mapped_regions[id].last_access = cycle_count;
@@ -224,7 +231,7 @@ void pref_phase_updateregioninfo(Phase_Region* mapped_regions, Addr lineAddr) {
   mapped_regions[id].RegionMemAccess[region_offset] = TRUE;
 }
 
-int pref_phase_computenextphase(void) {
+int pref_phase_computenextphase(Pref_PHASE* phase_hwp) {
   int ii, jj;
   int id = -1;
   for (ii = 0; ii < PREF_PHASE_TABLE_SIZE; ii++) {

@@ -87,7 +87,7 @@ void pref_stride_umlc_hit(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global
 /*************************************************************/
 /* Internal Function */
 void init_stride(HWP* hwp, Pref_Stride* stride_hwp);
-void pref_stride_train(Pref_Stride* stride_hwp, Addr lineAddr, Addr loadPC, Flag is_hit);
+void pref_stride_train(Pref_Stride* stride_hwp, uns8 proc_id, Addr lineAddr, Addr loadPC, Flag is_hit);
 /*************************************************************/
 /* Misc functions */
 void pref_stride_create_newentry(Pref_Stride* stride_hwp, int idx, Addr line_addr, Addr region_tag);

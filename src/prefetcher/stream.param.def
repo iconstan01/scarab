@@ -51,7 +51,7 @@
 
 DEF_PARAM(pref_stream_on                    , PREF_STREAM_ON                 , Flag   , Flag      ,FALSE     ,      )
 // CMP separate prefetcher for each core
-DEF_PARAM(pref_stream_per_core_enable       , PREF_STREAM_PER_CORE_ENABLE    , Flag   , Flag      ,FALSE     ,      )
+DEF_PARAM(pref_stream_per_core_enable       , PREF_STREAM_PER_CORE_ENABLE    , Flag   , Flag      ,TRUE     ,      )
 
 // the number of stream buffer
 DEF_PARAM(stream_buffer_n                   , STREAM_BUFFER_N                , uns    , uns       ,16        ,      ) 

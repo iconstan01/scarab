@@ -76,12 +76,12 @@ void pref_2dc_umlc_miss(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_h
 void pref_2dc_umlc_prefhit(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_hist);
 /*************************************************************/
 /* Internal Function */
-void init_2dc(HWP* hwp, Pref_2DC* tdc_hwp_core);
+void init_2dc(HWP* hwp, Pref_2DC* tdc_hwp_core, CacheLevel type);
 
-void pref_2dc_train(Pref_2DC* tdc_hwp, Addr lineAddr, Addr loadPC, Flag is_hit);
+void pref_2dc_train(Pref_2DC* tdc_hwp, uns8 proc_id, Addr lineAddr, Addr loadPC, Flag is_hit);
 /*************************************************************/
 /* Misc functions */
-void pref_2dc_throttle(Pref_2DC* tdc_hwp);
+void pref_2dc_throttle(Pref_2DC* tdc_hwp, uns8 proc_id);
 Addr pref_2dc_hash(Pref_2DC* tdc_hwp, Addr lineIndex, Addr loadPC, int deltaA, int deltaB);
 
 #endif /*  __PREF_2DC_H__*/
