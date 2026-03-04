@@ -70,6 +70,10 @@ extern Dcache_Stage* dc;
 
 static void collect_stream_stats(const Stream_Buffer* stream);
 
+static inline Flag pref_stream_use_per_core_state_effective(void) {
+  return PREF_STREAM_PER_CORE_ENABLE || NUM_CORES > 1;
+}
+
 /**************************************************************************************/
 /* stream prefetcher  */
 /* prefetch is initiated by dcache miss but the request fills the l1 cache
@@ -118,7 +122,7 @@ void init_stream_core(HWP* hwp, Pref_Stream* pref_stream_core) {
   for (proc_id = 0; proc_id < NUM_CORES; proc_id++) {
     pref_stream_core[proc_id].hwp_info = hwp->hwp_info;
 
-    if (PREF_STREAM_PER_CORE_ENABLE) {
+    if (pref_stream_use_per_core_state_effective()) {
       pref_stream_core[proc_id].stream = (Stream_Buffer*)calloc(STREAM_BUFFER_N, sizeof(Stream_Buffer));
       memset(pref_stream_core[proc_id].stream, 0, STREAM_BUFFER_N * sizeof(Stream_Buffer));
       pref_stream_core[proc_id].train_filter = (Addr*)calloc(TRAIN_FILTER_SIZE, sizeof(Addr));
@@ -145,7 +149,7 @@ void init_stream_core(HWP* hwp, Pref_Stream* pref_stream_core) {
     pref_stream_core[proc_id].num_tosend_vals[5] = 6;
   }
 
-  if (!PREF_STREAM_PER_CORE_ENABLE) {
+  if (!pref_stream_use_per_core_state_effective()) {
     pref_stream_core[0].stream = (Stream_Buffer*)calloc(STREAM_BUFFER_N, sizeof(Stream_Buffer));
     memset(pref_stream_core[0].stream, 0, STREAM_BUFFER_N * sizeof(Stream_Buffer));
     pref_stream_core[0].train_filter = (Addr*)calloc(TRAIN_FILTER_SIZE, sizeof(Addr));
@@ -378,7 +382,7 @@ int pref_stream_train_create_stream_buffer(Pref_Stream* pref_stream, uns8 proc_i
       }
       STAT_EVENT(0, REPLACE_OLD_STREAM);
       collect_stream_stats(&pref_stream->stream[lru_index]);
-      if (PREF_STREAM_PER_CORE_ENABLE) {
+      if (pref_stream_use_per_core_state_effective()) {
         uns8 proc_id2 = pref_stream->stream[lru_index].sp >> (58 - LOG2(DCACHE_LINE_SIZE));
         ASSERT(proc_id, proc_id == proc_id2);
       }
@@ -575,7 +579,7 @@ void pref_stream_per_core_done(uns proc_id) {
   if (PREF_UL1_ON) {
     for (uns ii = 0; ii < STREAM_BUFFER_N; ii++) {
       Stream_Buffer* stream = &stream_prefetchers_array.pref_stream_core_ul1[proc_id].stream[ii];
-      if (PREF_STREAM_PER_CORE_ENABLE || (stream->sp >> (58 - LOG2(DCACHE_LINE_SIZE))) == proc_id) {
+      if (pref_stream_use_per_core_state_effective() || (stream->sp >> (58 - LOG2(DCACHE_LINE_SIZE))) == proc_id) {
         collect_stream_stats(stream);
       }
     }
@@ -583,7 +587,7 @@ void pref_stream_per_core_done(uns proc_id) {
   if (PREF_UMLC_ON) {
     for (uns ii = 0; ii < STREAM_BUFFER_N; ii++) {
       Stream_Buffer* stream = &stream_prefetchers_array.pref_stream_core_umlc[proc_id].stream[ii];
-      if (PREF_STREAM_PER_CORE_ENABLE || (stream->sp >> (58 - LOG2(DCACHE_LINE_SIZE))) == proc_id) {
+      if (pref_stream_use_per_core_state_effective() || (stream->sp >> (58 - LOG2(DCACHE_LINE_SIZE))) == proc_id) {
         collect_stream_stats(stream);
       }
     }

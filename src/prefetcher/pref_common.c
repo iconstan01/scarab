@@ -73,6 +73,10 @@
 
 static int pref_table_size;
 
+static inline Flag pref_use_shared_queues_effective(void) {
+  return PREF_SHARED_QUEUES && NUM_CORES == 1;
+}
+
 /**************************************************************************************/
 /* Macros */
 #define DEBUG(proc_id, args...) _DEBUG(proc_id, DEBUG_PREF, ##args)
@@ -137,7 +141,7 @@ void pref_init(void) {
   pref.cores = (HWP_Core**)calloc(NUM_CORES, sizeof(HWP_Core*));
   for (uns proc_id = 0; proc_id < NUM_CORES; proc_id++) {
     pref_core_init(&pref.cores_array[proc_id]);
-    pref.cores[proc_id] = &pref.cores_array[PREF_SHARED_QUEUES ? 0 : proc_id];
+    pref.cores[proc_id] = &pref.cores_array[pref_use_shared_queues_effective() ? 0 : proc_id];
   }
 
   // initialize pref_table_size
@@ -641,7 +645,7 @@ void pref_update(void) {
   if (PREF_HFILTER_ON && PREF_HFILTER_RESET_ENABLE && cycle_count % PREF_HFILTER_RESET_INTERVAL == 0)
     pref_hfilter_pht_reset();
 
-  if (PREF_SHARED_QUEUES) {
+  if (pref_use_shared_queues_effective()) {
     pref_update_core(0);
   } else {
     for (uns proc_id = 0; proc_id < NUM_CORES; proc_id++) {

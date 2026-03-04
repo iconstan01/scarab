@@ -87,7 +87,7 @@ typedef struct Pref_PHASE_Struct {
 /*************************************************************/
 /* HWP Interface */
 void pref_phase_init(HWP* hwp);
-void pref_phase_ul1_train(Addr lineAddr, Addr loadPC, Flag pref_hit);
+void pref_phase_ul1_train(uns8 proc_id, Addr lineAddr, Addr loadPC, Flag pref_hit);
 void pref_phase_ul1_miss(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_hist);
 void pref_phase_ul1_hit(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_hist);
 
@@ -96,8 +96,8 @@ void pref_phase_ul1_prefhit(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 glob
 /*************************************************************/
 /* Misc functions */
 
-void pref_phase_updateregioninfo(Phase_Region*, Addr lineAddr);
+void pref_phase_updateregioninfo(uns8 proc_id, Phase_Region* mapped_regions, Addr lineAddr);
 
-int pref_phase_computenextphase(void);
+int pref_phase_computenextphase(Pref_PHASE* phase_hwp);
 
 #endif /*  __PREF_PHASE_H__*/
