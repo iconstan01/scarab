@@ -3505,28 +3505,14 @@ Flag new_mem_req(Mem_Req_Type type, uns8 proc_id, Addr addr, uns size, uns delay
     matching_req = 0;
   }
 
-  // if HIER_MSHR_ON, an MLC req matching an L2 prefetch has to reserve an entry
-  // in the MLC queue simulation inaccuracy: the data may be in MLC, but we wait
-  // on the L2 prefetch
+  // Keep queue matching local to the immediate destination level. In
+  // particular, do not merge MLC-targeted requests into UL1-targeted ones.
   if (matching_req && to_mlc && (matching_req->destination == DEST_L1)) {
-    if (HIER_MSHR_ON) {
-      ASSERT(0, !ALLOW_TYPE_MATCHES);  // we rely on the adjust function always
-                                       // returning true
-      ASSERTM(0, ADDR_TRANSLATION == ADDR_TRANS_NONE, "MLC && HIER_MSHR_ON && ADDR_TRANSLATION not supported\n");
-      Mem_Queue* mlc_queue = mlc_queue_for_proc(proc_id);
-      if (queue_full(mlc_queue))
-        return FALSE;
-      mlc_queue->reserved_entry_count += 1;
-      matching_req->reserved_entry_count += 1;
-    }
-    STAT_EVENT(proc_id, MLC_NEWREQ_MATCHED_L2_PREF);
-    Addr line_addr;
-
-    if ((MLC_Data*)cache_access(&MLC(proc_id)->cache, addr, &line_addr, FALSE)) {
-      STAT_EVENT(proc_id, MLC_NEWREQ_MATCHED_L2_PREF_MLC_HIT);
-    }
-    matching_req->mlc_miss = TRUE;
-    matching_req->mlc_miss_cycle = cycle_count;
+    matching_req = NULL;
+    queue_entry = NULL;
+    ramulator_match = FALSE;
+    demand_hit_prefetch = FALSE;
+    demand_hit_writeback = FALSE;
   }
 
   /* Step 2: Found matching request. Adjust it based on the current request */
