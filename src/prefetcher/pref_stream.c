@@ -648,19 +648,23 @@ void pref_stream_throttle_fb(Pref_Stream* pref_stream, uns8 proc_id) {
 }
 
 Flag pref_stream_bw_prefetchable(uns proc_id, Addr line_addr) {
-  int idx;
-  Stream_Buffer* stream;
-  if (PREF_UL1_ON) {
-    idx = pref_stream_train_create_stream_buffer(&stream_prefetchers_array.pref_stream_core_ul1[proc_id], proc_id,
-                                                 line_addr, FALSE, FALSE, 0);
-    stream = &stream_prefetchers_array.pref_stream_core_ul1[proc_id].stream[idx];
-  } else if (PREF_UMLC_ON) {
-    idx = pref_stream_train_create_stream_buffer(&stream_prefetchers_array.pref_stream_core_umlc[proc_id], proc_id,
-                                                 line_addr, FALSE, FALSE, 0);
-    stream = &stream_prefetchers_array.pref_stream_core_umlc[proc_id].stream[idx];
-  }
-  if (idx == -1)
-    return FALSE;
+  Pref_Stream* pref_stream = NULL;
+  int idx = -1;
 
-  return stream->buffer_full;
+  if (PREF_UL1_ON) {
+    pref_stream = &stream_prefetchers_array.pref_stream_core_ul1[proc_id];
+  } else if (PREF_UMLC_ON) {
+    pref_stream = &stream_prefetchers_array.pref_stream_core_umlc[proc_id];
+  } else if (PREF_DL0_ON) {
+    pref_stream = &stream_prefetchers_array.pref_stream_core_dl0[proc_id];
+  } else {
+    return FALSE;
+  }
+
+  idx = pref_stream_train_create_stream_buffer(pref_stream, proc_id, line_addr, FALSE, FALSE, 0);
+  if (idx < 0) {
+    return FALSE;
+  }
+
+  return pref_stream->stream[idx].buffer_full;
 }
