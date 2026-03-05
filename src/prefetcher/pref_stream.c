@@ -107,6 +107,10 @@ void pref_stream_init(HWP* hwp) {
 
   hwp->hwp_info->enabled = TRUE;
 
+  if (PREF_DL0_ON) {
+    stream_prefetchers_array.pref_stream_core_dl0 = (Pref_Stream*)malloc(sizeof(Pref_Stream) * NUM_CORES);
+    init_stream_core(hwp, stream_prefetchers_array.pref_stream_core_dl0);
+  }
   if (PREF_UMLC_ON) {
     stream_prefetchers_array.pref_stream_core_umlc = (Pref_Stream*)malloc(sizeof(Pref_Stream) * NUM_CORES);
     init_stream_core(hwp, stream_prefetchers_array.pref_stream_core_umlc);
@@ -166,7 +170,7 @@ void init_stream_core(HWP* hwp, Pref_Stream* pref_stream_core) {
 }
 
 void pref_stream_train(Pref_Stream* pref_stream, uns8 proc_id, Addr line_addr, Addr load_PC, uns32 global_hist,
-                       Flag create, Flag is_mlc) /* line_addr: the first
+                       Flag create, CacheLevel type) /* line_addr: the first
                                        address of the cache
                                        block */
 {
@@ -236,13 +240,17 @@ void pref_stream_train(Pref_Stream* pref_stream, uns8 proc_id, Addr line_addr, A
         } else {
           Addr line_index = stream->ep + stream->dir;
           uns distance = stream->dir > 0 ? line_index - stream->sp : stream->sp - line_index;
-          if (is_mlc) {
+          if (type == UMLC) {
             if (!pref_addto_umlc_req_queue(proc_id, line_index, pref_stream->hwp_info->id)) {
               return;
             }
-          } else {
+          } else if (type == UL1) {
             if (!pref_addto_ul1req_queue_set(proc_id, line_index, pref_stream->hwp_info->id, distance, load_PC,
                                              global_hist, stream->buffer_full)) {
+              return;
+            }
+          } else {
+            if (!pref_addto_dl0req_queue(proc_id, line_index, pref_stream->hwp_info->id)) {
               return;
             }
           }
@@ -268,32 +276,55 @@ void pref_stream_train(Pref_Stream* pref_stream, uns8 proc_id, Addr line_addr, A
   }
 }
 
+void pref_stream_dl0_miss(Addr lineAddr, Addr loadPC) {
+  if (!PREF_DL0_ON)
+    return;
+  uns8 proc_id = get_proc_id_from_cmp_addr(lineAddr);
+  pref_stream_train(&stream_prefetchers_array.pref_stream_core_dl0[proc_id], proc_id, lineAddr, loadPC, 0, TRUE, DL0);
+}
+
+void pref_stream_dl0_hit(Addr lineAddr, Addr loadPC) {
+  if (!PREF_DL0_ON)
+    return;
+  uns8 proc_id = get_proc_id_from_cmp_addr(lineAddr);
+  pref_stream_train(&stream_prefetchers_array.pref_stream_core_dl0[proc_id], proc_id, lineAddr, loadPC, 0, FALSE,
+                    DL0);
+}
+
+void pref_stream_dl0_pref_hit(Addr lineAddr, Addr loadPC) {
+  if (!PREF_DL0_ON)
+    return;
+  uns8 proc_id = get_proc_id_from_cmp_addr(lineAddr);
+  pref_stream_train(&stream_prefetchers_array.pref_stream_core_dl0[proc_id], proc_id, lineAddr, loadPC, 0, FALSE,
+                    DL0);
+}
+
 void pref_stream_ul1_miss(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_hist) {
   if (!PREF_UL1_ON)
     return;
   pref_stream_train(&stream_prefetchers_array.pref_stream_core_ul1[proc_id], proc_id, lineAddr, loadPC, global_hist,
-                    TRUE, FALSE);
+                    TRUE, UL1);
 }
 
 void pref_stream_ul1_hit(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_hist) {
   if (!PREF_UL1_ON)
     return;
   pref_stream_train(&stream_prefetchers_array.pref_stream_core_ul1[proc_id], proc_id, lineAddr, loadPC, global_hist,
-                    FALSE, FALSE);
+                    FALSE, UL1);
 }
 
 void pref_stream_umlc_miss(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_hist) {
   if (!PREF_UMLC_ON)
     return;
   pref_stream_train(&stream_prefetchers_array.pref_stream_core_umlc[proc_id], proc_id, lineAddr, loadPC, global_hist,
-                    TRUE, TRUE);
+                    TRUE, UMLC);
 }
 
 void pref_stream_umlc_hit(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_hist) {
   if (!PREF_UMLC_ON)
     return;
   pref_stream_train(&stream_prefetchers_array.pref_stream_core_umlc[proc_id], proc_id, lineAddr, loadPC, global_hist,
-                    FALSE, TRUE);
+                    FALSE, UMLC);
 }
 int pref_stream_train_create_stream_buffer(Pref_Stream* pref_stream, uns8 proc_id, Addr line_addr, Flag train,
                                            Flag create, int extra_dis) {
@@ -576,6 +607,14 @@ void pref_stream_throttle_stream(int index) {
 }
 
 void pref_stream_per_core_done(uns proc_id) {
+  if (PREF_DL0_ON) {
+    for (uns ii = 0; ii < STREAM_BUFFER_N; ii++) {
+      Stream_Buffer* stream = &stream_prefetchers_array.pref_stream_core_dl0[proc_id].stream[ii];
+      if (pref_stream_use_per_core_state_effective() || (stream->sp >> (58 - LOG2(DCACHE_LINE_SIZE))) == proc_id) {
+        collect_stream_stats(stream);
+      }
+    }
+  }
   if (PREF_UL1_ON) {
     for (uns ii = 0; ii < STREAM_BUFFER_N; ii++) {
       Stream_Buffer* stream = &stream_prefetchers_array.pref_stream_core_ul1[proc_id].stream[ii];

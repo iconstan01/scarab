@@ -170,7 +170,8 @@ typedef struct HWP_Common_struct {
 
 typedef enum {
   UMLC,
-  UL1
+  UL1,
+  DL0
 } CacheLevel;
 
 /**************************************************************/
