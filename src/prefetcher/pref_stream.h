@@ -85,6 +85,7 @@ typedef struct Pref_Stream_struct {
 } Pref_Stream;
 
 typedef struct {
+  Pref_Stream* pref_stream_core_dl0;
   Pref_Stream* pref_stream_core_ul1;
   Pref_Stream* pref_stream_core_umlc;
 } stream_prefetchers;
@@ -94,6 +95,9 @@ void pref_stream_init(HWP* hwp);
 void pref_stream_per_core_done(uns proc_id);
 /*************************************************************/
 /* HWP Interface */
+void pref_stream_dl0_miss(Addr lineAddr, Addr loadPC);
+void pref_stream_dl0_hit(Addr lineAddr, Addr loadPC);
+void pref_stream_dl0_pref_hit(Addr lineAddr, Addr loadPC);
 void pref_stream_ul1_miss(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_hist);
 void pref_stream_ul1_hit(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_hist);
 void pref_stream_umlc_miss(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_hist);
@@ -101,7 +105,7 @@ void pref_stream_umlc_hit(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global
 /*************************************************************/
 void init_stream_core(HWP* hwp, Pref_Stream* pref_stream_core);
 void pref_stream_train(Pref_Stream* pref_stream, uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_hist,
-                       Flag create, Flag is_mlc);
+                       Flag create, CacheLevel type);
 
 int pref_stream_train_create_stream_buffer(Pref_Stream* pref_stream, uns8 proc_id, Addr line_index, Flag train,
                                            Flag create, int extra_dis);

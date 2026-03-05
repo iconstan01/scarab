@@ -253,6 +253,8 @@ void pref_dl0_miss(Addr line_addr, Addr load_PC) {
   int ii;
   if (!PREF_FRAMEWORK_ON)
     return;
+  if (!PREF_DL0_ON)
+    return;
   if (PREF_DL0_MISS_ON) {
     for (ii = 0; ii < pref_table_size; ii++) {
       if (pref_table[ii].hwp_info->enabled && pref_table[ii].dl0_miss_func) {
@@ -267,6 +269,8 @@ void pref_dl0_hit(Addr line_addr, Addr load_PC) {
   int ii;
   if (!PREF_FRAMEWORK_ON)
     return;
+  if (!PREF_DL0_ON)
+    return;
   if (PREF_DL0_HIT_ON) {
     for (ii = 0; ii < pref_table_size; ii++) {
       if (pref_table[ii].hwp_info->enabled && pref_table[ii].dl0_hit_func) {
@@ -280,6 +284,8 @@ void pref_dl0_hit(Addr line_addr, Addr load_PC) {
 void pref_dl0_pref_hit(Addr line_addr, Addr load_PC, uns8 prefetcher_id) {
   int ii;
   if (!PREF_FRAMEWORK_ON)
+    return;
+  if (!PREF_DL0_ON)
     return;
   if (prefetcher_id == 0)
     return;
