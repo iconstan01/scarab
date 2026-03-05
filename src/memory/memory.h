@@ -201,7 +201,7 @@ typedef struct Pref_Req_Info_Struct {
   uns32 global_hist;  // Used for perf hfilter
   uns distance;
   Flag bw_limited;
-  Destination dest;  // Only MLC/L2 values matter
+  Destination dest;  // Prefetch destination hint (e.g., DEST_DCACHE/DEST_MLC/DEST_L1)
 } Pref_Req_Info;
 
 typedef enum L1_Dyn_Partition_Policy_enum {

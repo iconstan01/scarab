@@ -656,14 +656,14 @@ void pref_update(void) {
 
 void pref_update_core(uns proc_id) {
   // first check the dl0 req queue to see if they can be satisfied by the dl0.
-  // otherwise send them to the ul1 by putting them in the ul1req queue
+  // otherwise send them as true D-cache-targeted prefetch requests.
 
   // dcache access
   //  - 1. check to make sure ports are available
-  //  - 2. if missing in the cache,  insert into the l2 req queue.
+  //  - 2. if missing in the cache, issue a D-cache-targeted prefetch request.
 
   // ul1 access
-  //  - 1. create a new request and call new_mem_req
+  //  - 1. create a UL1-targeted request and call new_mem_req
 
   Pref_Mem_Req* dl0req_queue = pref.cores[proc_id]->dl0req_queue;
   int* dl0req_queue_send_pos = &pref.cores[proc_id]->dl0req_queue_send_pos;
@@ -700,11 +700,38 @@ void pref_update_core(uns proc_id) {
       dc_hit = (Dcache_Data*)cache_access(&dc->dcache, dl0req_queue[q_index].line_addr, &dummy_line_addr, FALSE);
 
       if (dc_hit) {
-        // nothing for now
+        // Already present in D-cache; drop this queued request.
+        dl0req_queue[q_index].valid = FALSE;
       } else {
-        // put req. into the ul1req_queue
-        if (!pref_addto_ul1req_queue(proc_id, dl0req_queue[q_index].line_index, dl0req_queue[q_index].prefetcher_id)) {
+        Pref_Req_Info info;
+
+        info.prefetcher_id = dl0req_queue[q_index].prefetcher_id;
+        info.distance = dl0req_queue[q_index].distance;
+        info.loadPC = dl0req_queue[q_index].loadPC;
+        info.global_hist = dl0req_queue[q_index].global_hist;
+        info.bw_limited = dl0req_queue[q_index].bw_limited;
+        info.dest = DEST_DCACHE;
+
+        if ((model->mem == MODEL_MEM) &&
+            ((MEM_REQ_BUFFER_ENTRIES - mem_get_req_count(proc_id)) < PREF_L1Q_DEMAND_RESERVE)) {
+          STAT_EVENT(0, PREF_DL0REQ_SEND_QUEUE_STALL);
+          if (PREF_REQ_DROP && MEM_REQ_BUFFER_ENTRIES == mem_get_req_count(proc_id)) {
+            dl0req_queue[q_index].valid = FALSE;
+          } else {
+            inc_send_pos = FALSE;
+          }
+          break;
+        }
+
+        if ((model->mem == MODEL_MEM) &&
+            new_mem_req(MRT_DPRF, proc_id, dl0req_queue[q_index].line_addr, DCACHE_LINE_SIZE, 1, NULL,
+                        dcache_fill_line, unique_count, &info)) {
+          STAT_EVENT(0, PREF_DL0REQ_QUEUE_SENTREQ);
+          dl0req_queue[q_index].valid = FALSE;
+        } else {
+          STAT_EVENT(0, PREF_DL0REQ_SEND_QUEUE_STALL);
           inc_send_pos = FALSE;
+          break;
         }
       }
     }
@@ -800,8 +827,7 @@ void pref_update_core(uns proc_id) {
         break;
       }
       if ((model->mem == MODEL_MEM) && new_mem_req(MRT_DPRF, proc_id, ul1req_queue[q_index].line_addr, L1_LINE_SIZE, 1,
-                                                   NULL, STREAM_PREF_INTO_DCACHE ? dcache_fill_line : NULL,
-                                                   unique_count, &info)) {  // CMP maybe unique_count_per_core[proc_id]?
+                                                   NULL, NULL, unique_count, &info)) {  // CMP maybe unique_count_per_core[proc_id]?
         DEBUG(0, "Sent req %llx to ul1 Qpos:%d\n", ul1req_queue[q_index].line_index, *ul1req_queue_send_pos);
         STAT_EVENT(0, PREF_UL1REQ_QUEUE_SENTREQ);
         ul1req_queue[q_index].valid = FALSE;
