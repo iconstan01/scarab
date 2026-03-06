@@ -98,6 +98,12 @@ DEF_STAT(L1_PREF_HIT                      ,COUNT,     NO_RATIO)
 DEF_STAT(L1_PREF_UNIQUE_HIT               ,COUNT,     NO_RATIO)
 DEF_STAT(L1_PREF_LATE                     ,COUNT,     NO_RATIO)
 
+DEF_STAT(DL0_PREF_HIT                     ,COUNT,     NO_RATIO)
+DEF_STAT(DL0_PREF_UNIQUE_HIT              ,COUNT,     NO_RATIO)
+DEF_STAT(DL0_PREF_LATE                    ,COUNT,     NO_RATIO)
+DEF_STAT(DL0_PREF_EVICT                   ,COUNT,     NO_RATIO)
+DEF_STAT(DL0_PREF_UNUSED_EVICT            ,COUNT,     NO_RATIO)
+
 DEF_STAT(L1_LATE_PREF_CYCLES              , COUNT ,   NO_RATIO)
 
 DEF_STAT(L1_LATE_PREF_CYCLES_DIST_0       , DIST  ,   NO_RATIO)
