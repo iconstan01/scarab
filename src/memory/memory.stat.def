@@ -364,6 +364,10 @@ DEF_STAT(  MLC_DEMAND_MATCH_PREF_HIT_DFETCH  ,COUNT,    NO_RATIO)
 DEF_STAT(  MLC_DEMAND_MATCH_PREF_HIT_DSTORE  ,COUNT,    NO_RATIO)
 DEF_STAT(  MLC_WB_HIT                        ,DIST,    NO_RATIO) 
 
+/* demand req promoted after matching an in-flight prefetch */
+DEF_STAT(  MLC_LATE_PROMOTION_DFETCH         ,COUNT,   NO_RATIO)
+DEF_STAT(  MLC_LATE_PROMOTION_DSTORE         ,COUNT,   NO_RATIO)
+
 DEF_STAT(  MLC_MISS_ONPATH		   , DIST  , NO_RATIO  )
 DEF_STAT(  MLC_MISS_OFFPATH		   , DIST  , NO_RATIO  )
 
@@ -1424,6 +1428,10 @@ DEF_STAT(  CORE_MLC_DEMAND_MATCH_PREF_HIT_DFETCH ,COUNT,   NO_RATIO)
 DEF_STAT(  CORE_MLC_DEMAND_MATCH_PREF_HIT_DSTORE ,COUNT,   NO_RATIO)
 DEF_STAT(  CORE_MLC_DEMAND_HIT                   ,COUNT,   NO_RATIO)
 DEF_STAT(  CORE_MLC_WB_HIT                       ,DIST,    NO_RATIO) 
+
+/* demand req promoted after matching an in-flight prefetch */
+DEF_STAT(  CORE_MLC_LATE_PROMOTION_DFETCH        ,COUNT,   NO_RATIO)
+DEF_STAT(  CORE_MLC_LATE_PROMOTION_DSTORE        ,COUNT,   NO_RATIO)
 
 DEF_STAT(  CORE_MLC_HIT,   DIST,  NO_RATIO  )  // Consider a prefetch hit by demand before mlc access as a demand
 DEF_STAT(  CORE_MLC_MISS,  DIST,  NO_RATIO  )   
