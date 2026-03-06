@@ -537,7 +537,14 @@ static inline void dcache_cacheline_hit(Op* op, Addr line_addr, Dcache_Data* lin
   if (PREF_FRAMEWORK_ON && (PREF_UPDATE_ON_WRONGPATH || !op->off_path)) {
     // if framework is on use new prefetcher. otherwise old one
     if (line->HW_prefetch) {
-      pref_dl0_pref_hit(line_addr, op->inst_info->addr, 0);  // CHANGEME
+      if (line->dl0_prefetch) {
+        STAT_EVENT(op->proc_id, DL0_PREF_HIT);
+        if (!line->dl0_prefetch_used) {
+          line->dl0_prefetch_used = TRUE;
+          STAT_EVENT(op->proc_id, DL0_PREF_UNIQUE_HIT);
+        }
+        pref_dl0_pref_hit(line_addr, op->inst_info->addr, line->dl0_prefetcher_id);
+      }
       line->HW_prefetch = FALSE;
     } else {
       pref_dl0_hit(line_addr, op->inst_info->addr);
@@ -747,6 +754,8 @@ static inline Dcache_Data* dcache_fill_get_cacheline(Mem_Req* req) {
    */
   Flag repl_line_valid;
   data = (Dcache_Data*)get_next_repl_line(&dc->dcache, dc->proc_id, req->addr, &repl_line_addr, &repl_line_valid);
+  Flag evict_dl0_pref = repl_line_valid && data->dl0_prefetch;
+  Flag evict_dl0_pref_unused = evict_dl0_pref && !data->dl0_prefetch_used;
   if (repl_line_valid && data->dirty) {
     /* need to do a write-back */
     uns repl_proc_id = get_proc_id_from_cmp_addr(repl_line_addr);
@@ -771,6 +780,13 @@ static inline Dcache_Data* dcache_fill_get_cacheline(Mem_Req* req) {
   ASSERT(dc->proc_id, req->emitted_cycle);
   ASSERT(dc->proc_id, cycle_count >= req->emitted_cycle);
   ASSERT(dc->proc_id, ((int)req->mlc_hit + (int)req->l1_hit) < 2);
+
+  if (evict_dl0_pref) {
+    STAT_EVENT(dc->proc_id, DL0_PREF_EVICT);
+    if (evict_dl0_pref_unused) {
+      STAT_EVENT(dc->proc_id, DL0_PREF_UNUSED_EVICT);
+    }
+  }
 
   STAT_EVENT(dc->proc_id, DCACHE_FILL);
   INC_STAT_EVENT(dc->proc_id, DATA_LD_CYCLES_ONPATH + req->off_path, cycle_count - req->emitted_cycle);
@@ -809,9 +825,15 @@ static inline void dcache_fill_process_cacheline(Mem_Req* req, Dcache_Data* data
   if (req->type == MRT_DPRF) {  // cmp FIXME
     data->HW_prefetch = TRUE;
     data->HW_prefetched = TRUE;
+    data->dl0_prefetch = (req->destination == DEST_DCACHE);
+    data->dl0_prefetch_used = FALSE;
+    data->dl0_prefetcher_id = data->dl0_prefetch ? req->prefetcher_id : 0;
   } else {
     data->HW_prefetch = FALSE;
     data->HW_prefetched = FALSE;
+    data->dl0_prefetch = FALSE;
+    data->dl0_prefetch_used = FALSE;
+    data->dl0_prefetcher_id = 0;
   }
 
   /* process req op */

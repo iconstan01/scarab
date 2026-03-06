@@ -2913,7 +2913,9 @@ Flag mem_adjust_matching_request(Mem_Req* req, Mem_Req_Type type, Addr addr, uns
         }
       }
 
-      if (req->destination == DEST_MLC) {
+      if (req->destination == DEST_DCACHE) {
+        STAT_EVENT(req->proc_id, DL0_PREF_LATE);
+      } else if (req->destination == DEST_MLC) {
         STAT_EVENT(req->proc_id, MLC_PREF_LATE);
       } else if (req->destination == DEST_L1) {
         STAT_EVENT(req->proc_id, L1_PREF_LATE);
