@@ -1200,6 +1200,13 @@ Flag mem_process_mlc_hit_access(Mem_Req* req, Mem_Queue_Entry* mlc_queue_entry, 
       if (req->type == MRT_DPRF || req->type == MRT_IPRF || req->demand_match_prefetch) {
         STAT_EVENT(req->proc_id, MLC_PREF_REQ_HIT);
         STAT_EVENT(req->proc_id, CORE_MLC_PREF_REQ_HIT);
+        if (req->demand_match_prefetch && req->type == MRT_DFETCH) {
+          STAT_EVENT(req->proc_id, MLC_DEMAND_MATCH_PREF_HIT_DFETCH);
+          STAT_EVENT(req->proc_id, CORE_MLC_DEMAND_MATCH_PREF_HIT_DFETCH);
+        } else if (req->demand_match_prefetch && req->type == MRT_DSTORE) {
+          STAT_EVENT(req->proc_id, MLC_DEMAND_MATCH_PREF_HIT_DSTORE);
+          STAT_EVENT(req->proc_id, CORE_MLC_DEMAND_MATCH_PREF_HIT_DSTORE);
+        }
       } else if ((req->type == MRT_DFETCH) || (req->type == MRT_DSTORE) || (req->type == MRT_IFETCH)) {
         STAT_EVENT(req->proc_id, MLC_DEMAND_HIT);
         STAT_EVENT(req->proc_id, CORE_MLC_DEMAND_HIT);
@@ -1399,6 +1406,13 @@ static Flag mem_process_mlc_miss_access(Mem_Req* req, Mem_Queue_Entry* mlc_queue
     if (req->type == MRT_DPRF || req->type == MRT_IPRF || req->demand_match_prefetch) {
       STAT_EVENT(req->proc_id, MLC_PREF_REQ_MISS);
       STAT_EVENT(req->proc_id, CORE_MLC_PREF_REQ_MISS);
+      if (req->demand_match_prefetch && req->type == MRT_DFETCH) {
+        STAT_EVENT(req->proc_id, MLC_DEMAND_MATCH_PREF_MISS_DFETCH);
+        STAT_EVENT(req->proc_id, CORE_MLC_DEMAND_MATCH_PREF_MISS_DFETCH);
+      } else if (req->demand_match_prefetch && req->type == MRT_DSTORE) {
+        STAT_EVENT(req->proc_id, MLC_DEMAND_MATCH_PREF_MISS_DSTORE);
+        STAT_EVENT(req->proc_id, CORE_MLC_DEMAND_MATCH_PREF_MISS_DSTORE);
+      }
     } else if ((req->type == MRT_DFETCH) || (req->type == MRT_DSTORE) || (req->type == MRT_IFETCH)) {
       STAT_EVENT(req->proc_id, MLC_DEMAND_MISS);
       STAT_EVENT(req->proc_id, CORE_MLC_DEMAND_MISS);
