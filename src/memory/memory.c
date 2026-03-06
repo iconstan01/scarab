@@ -2898,6 +2898,21 @@ Flag mem_adjust_matching_request(Mem_Req* req, Mem_Req_Type type, Addr addr, uns
 
     // cmp FIXME prefetchers
     if (demand_hit_prefetch && type != MRT_DPRF && type != MRT_IPRF) {
+      /*
+       * This request matched an in-flight prefetch and is now promoted to demand.
+       * If the MLC miss was already accounted, the request can contribute to demand
+       * completion/fill stats without appearing in demand MLC miss type stats.
+       */
+      if (req->mlc_miss) {
+        if (type == MRT_DFETCH) {
+          STAT_EVENT(req->proc_id, MLC_LATE_PROMOTION_DFETCH);
+          STAT_EVENT(req->proc_id, CORE_MLC_LATE_PROMOTION_DFETCH);
+        } else if (type == MRT_DSTORE) {
+          STAT_EVENT(req->proc_id, MLC_LATE_PROMOTION_DSTORE);
+          STAT_EVENT(req->proc_id, CORE_MLC_LATE_PROMOTION_DSTORE);
+        }
+      }
+
       if (req->destination == DEST_MLC) {
         STAT_EVENT(req->proc_id, MLC_PREF_LATE);
       } else if (req->destination == DEST_L1) {
