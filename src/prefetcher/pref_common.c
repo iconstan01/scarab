@@ -283,12 +283,15 @@ void pref_dl0_hit(Addr line_addr, Addr load_PC) {
 // FIXME LATER
 void pref_dl0_pref_hit(Addr line_addr, Addr load_PC, uns8 prefetcher_id) {
   int ii;
+  uns proc_id = get_proc_id_from_cmp_addr(line_addr);
   if (!PREF_FRAMEWORK_ON)
     return;
   if (!PREF_DL0_ON)
     return;
   if (prefetcher_id == 0)
     return;
+
+  pref_table[prefetcher_id].hwp_info->curr_useful_core[proc_id]++;
 
   if (PREF_DL0_HIT_ON) {
     for (ii = 0; ii < pref_table_size; ii++) {
@@ -473,7 +476,7 @@ Flag pref_dl0req_queue_filter(Addr line_addr) {
     if (dl0req_queue[ii].valid &&
         (dl0req_queue[ii].line_addr >> LOG2(DCACHE_LINE_SIZE)) == (line_addr >> LOG2(DCACHE_LINE_SIZE))) {
       dl0req_queue[ii].valid = FALSE;
-      STAT_EVENT(0, PREF_DL0REQ_QUEUE_HIT_BY_DEMAND);
+      STAT_EVENT(proc_id, PREF_DL0REQ_QUEUE_HIT_BY_DEMAND);
       return TRUE;
     }
   }
@@ -534,13 +537,13 @@ Flag pref_addto_dl0req_queue(uns8 proc_id, Addr line_index, uns8 prefetcher_id) 
   if (PREF_DL0REQ_ADD_FILTER_ON) {
     for (ii = 0; ii < PREF_DL0REQ_QUEUE_SIZE; ii++) {
       if (dl0req_queue[ii].line_index == line_index) {
-        STAT_EVENT(0, PREF_DL0REQ_QUEUE_MATCHED_REQ);
+        STAT_EVENT(proc_id, PREF_DL0REQ_QUEUE_MATCHED_REQ);
         return TRUE;  // Hit another request
       }
     }
   }
   if (dl0req_queue[(*dl0req_queue_req_pos + 1) % PREF_DL0REQ_QUEUE_SIZE].valid) {
-    STAT_EVENT_ALL(PREF_DL0REQ_QUEUE_FULL);
+    STAT_EVENT(proc_id, PREF_DL0REQ_QUEUE_FULL);
     if (!PREF_DL0REQ_QUEUE_OVERWRITE_ON_FULL) {
       return FALSE;  // Q full
     }
@@ -720,7 +723,7 @@ void pref_update_core(uns proc_id) {
 
         if ((model->mem == MODEL_MEM) &&
             ((MEM_REQ_BUFFER_ENTRIES - mem_get_req_count(proc_id)) < PREF_L1Q_DEMAND_RESERVE)) {
-          STAT_EVENT(0, PREF_DL0REQ_SEND_QUEUE_STALL);
+          STAT_EVENT(proc_id, PREF_DL0REQ_SEND_QUEUE_STALL);
           if (PREF_REQ_DROP && MEM_REQ_BUFFER_ENTRIES == mem_get_req_count(proc_id)) {
             dl0req_queue[q_index].valid = FALSE;
           } else {
@@ -732,10 +735,10 @@ void pref_update_core(uns proc_id) {
         if ((model->mem == MODEL_MEM) &&
             new_mem_req(MRT_DPRF, proc_id, dl0req_queue[q_index].line_addr, DCACHE_LINE_SIZE, 1, NULL,
                         dcache_fill_line, unique_count, &info)) {
-          STAT_EVENT(0, PREF_DL0REQ_QUEUE_SENTREQ);
+          STAT_EVENT(proc_id, PREF_DL0REQ_QUEUE_SENTREQ);
           dl0req_queue[q_index].valid = FALSE;
         } else {
-          STAT_EVENT(0, PREF_DL0REQ_SEND_QUEUE_STALL);
+          STAT_EVENT(proc_id, PREF_DL0REQ_SEND_QUEUE_STALL);
           inc_send_pos = FALSE;
           break;
         }
