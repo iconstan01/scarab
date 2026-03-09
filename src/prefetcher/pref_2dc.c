@@ -145,7 +145,11 @@ void pref_2dc_umlc_miss(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_h
 void pref_2dc_train(Pref_2DC* tdc_hwp, uns8 proc_id, Addr lineAddr, Addr loadPC, Flag is_hit) {
   int delta;
   Addr hash;
-  Addr lineIndex = lineAddr >> LOG2(DCACHE_LINE_SIZE);
+  /*
+   * Keep 2DC delta/correlation math on a proc-agnostic line index (CMP bits
+   * removed). Re-apply proc CMP tag only when enqueuing a prefetch request.
+   */
+  Addr lineIndex = convert_to_cmp_addr(0, lineAddr) >> LOG2(DCACHE_LINE_SIZE);
   Addr dummy_lineaddr;
   Pref_2DC_Region* region = &tdc_hwp->regions[(lineIndex >> PREF_2DC_ZONE_SHIFT) % PREF_2DC_REGION_HASH];
 
@@ -193,32 +197,38 @@ void pref_2dc_train(Pref_2DC* tdc_hwp, uns8 proc_id, Addr lineAddr, Addr loadPC,
       // Now just assume that this is a strided access and send out the next
       // few.
       for (; num_pref_sent < tdc_hwp->pref_degree; num_pref_sent++) {
+        Addr enq_line_index;
+
         lineIndex += region->deltaA;
+        enq_line_index = convert_to_cmp_addr(proc_id, lineIndex << LOG2(DCACHE_LINE_SIZE)) >> LOG2(DCACHE_LINE_SIZE);
         if (tdc_hwp->type == UMLC)
-          pref_addto_umlc_req_queue(proc_id, lineIndex, tdc_hwp->hwp_info->id);
+          pref_addto_umlc_req_queue(proc_id, enq_line_index, tdc_hwp->hwp_info->id);
         else if (tdc_hwp->type == UL1)
-          pref_addto_ul1req_queue_set(proc_id, lineIndex, tdc_hwp->hwp_info->id, 0, loadPC, 0, FALSE);  // FIXME
+          pref_addto_ul1req_queue_set(proc_id, enq_line_index, tdc_hwp->hwp_info->id, 0, loadPC, 0, FALSE);  // FIXME
         else
-          pref_addto_dl0req_queue(proc_id, lineIndex, tdc_hwp->hwp_info->id);
+          pref_addto_dl0req_queue(proc_id, enq_line_index, tdc_hwp->hwp_info->id);
       }
     }
     while (num_pref_sent < tdc_hwp->pref_degree) {
+      Addr enq_line_index;
+
       hash = pref_2dc_hash(tdc_hwp, lineIndex, loadPC, delta1, delta2);
       data = cache_access(&tdc_hwp->cache, hash, &dummy_lineaddr, TRUE);
       if (!data) {  // no hit for this hash
         return;
       }
       lineIndex += data->delta;
+      enq_line_index = convert_to_cmp_addr(proc_id, lineIndex << LOG2(DCACHE_LINE_SIZE)) >> LOG2(DCACHE_LINE_SIZE);
 
       delta1 = delta2;
       delta2 = data->delta;
 
       if (tdc_hwp->type == UMLC)
-        pref_addto_umlc_req_queue(proc_id, lineIndex, tdc_hwp->hwp_info->id);
+        pref_addto_umlc_req_queue(proc_id, enq_line_index, tdc_hwp->hwp_info->id);
       else if (tdc_hwp->type == UL1)
-        pref_addto_ul1req_queue_set(proc_id, lineIndex, tdc_hwp->hwp_info->id, 0, loadPC, 0, FALSE);  // FIXME
+        pref_addto_ul1req_queue_set(proc_id, enq_line_index, tdc_hwp->hwp_info->id, 0, loadPC, 0, FALSE);  // FIXME
       else
-        pref_addto_dl0req_queue(proc_id, lineIndex, tdc_hwp->hwp_info->id);
+        pref_addto_dl0req_queue(proc_id, enq_line_index, tdc_hwp->hwp_info->id);
       num_pref_sent++;
     }
   }
