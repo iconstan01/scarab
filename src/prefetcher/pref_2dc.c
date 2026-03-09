@@ -81,6 +81,11 @@ void pref_2dc_init(HWP* hwp) {
   if (!PREF_2DC_ON)
     return;
 
+  if (PREF_DL0_ON) {
+    tdc_prefetcher_array.tdc_hwp_dl0 = (Pref_2DC*)malloc(sizeof(Pref_2DC) * NUM_CORES);
+    init_2dc(hwp, tdc_prefetcher_array.tdc_hwp_dl0, DL0);
+  }
+
   if (PREF_UMLC_ON) {
     tdc_prefetcher_array.tdc_hwp_umlc = (Pref_2DC*)malloc(sizeof(Pref_2DC) * NUM_CORES);
     init_2dc(hwp, tdc_prefetcher_array.tdc_hwp_umlc, UMLC);
@@ -111,6 +116,17 @@ void init_2dc(HWP* hwp, Pref_2DC* tdc_hwp_core, CacheLevel type) {
     tdc_hwp_core[proc_id].pref_degree = PREF_2DC_DEGREE;
   }
 }
+
+void pref_2dc_dl0_miss(Addr lineAddr, Addr loadPC) {
+  uns8 proc_id = get_proc_id_from_cmp_addr(lineAddr);
+  pref_2dc_train(&tdc_prefetcher_array.tdc_hwp_dl0[proc_id], proc_id, lineAddr, loadPC, FALSE);
+}
+
+void pref_2dc_dl0_prefhit(Addr lineAddr, Addr loadPC) {
+  uns8 proc_id = get_proc_id_from_cmp_addr(lineAddr);
+  pref_2dc_train(&tdc_prefetcher_array.tdc_hwp_dl0[proc_id], proc_id, lineAddr, loadPC, TRUE);
+}
+
 void pref_2dc_ul1_prefhit(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_hist) {
   pref_2dc_train(&tdc_prefetcher_array.tdc_hwp_ul1[proc_id], proc_id, lineAddr, loadPC, TRUE);
 }
@@ -180,8 +196,10 @@ void pref_2dc_train(Pref_2DC* tdc_hwp, uns8 proc_id, Addr lineAddr, Addr loadPC,
         lineIndex += region->deltaA;
         if (tdc_hwp->type == UMLC)
           pref_addto_umlc_req_queue(proc_id, lineIndex, tdc_hwp->hwp_info->id);
-        else
+        else if (tdc_hwp->type == UL1)
           pref_addto_ul1req_queue_set(proc_id, lineIndex, tdc_hwp->hwp_info->id, 0, loadPC, 0, FALSE);  // FIXME
+        else
+          pref_addto_dl0req_queue(proc_id, lineIndex, tdc_hwp->hwp_info->id);
       }
     }
     while (num_pref_sent < tdc_hwp->pref_degree) {
@@ -197,8 +215,10 @@ void pref_2dc_train(Pref_2DC* tdc_hwp, uns8 proc_id, Addr lineAddr, Addr loadPC,
 
       if (tdc_hwp->type == UMLC)
         pref_addto_umlc_req_queue(proc_id, lineIndex, tdc_hwp->hwp_info->id);
-      else
+      else if (tdc_hwp->type == UL1)
         pref_addto_ul1req_queue_set(proc_id, lineIndex, tdc_hwp->hwp_info->id, 0, loadPC, 0, FALSE);  // FIXME
+      else
+        pref_addto_dl0req_queue(proc_id, lineIndex, tdc_hwp->hwp_info->id);
       num_pref_sent++;
     }
   }
