@@ -82,7 +82,7 @@ void pref_ghb_umlc_prefhit(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 globa
 
 /*************************************************************/
 /* Internal function */
-void init_ghb_core(HWP* hwp, Pref_GHB* ghb_hwp_core);
+void init_ghb_core(HWP* hwp, Pref_GHB* ghb_hwp_core, CacheLevel type);
 void pref_ghb_train(Pref_GHB* ghb_hwp, uns8 proc_id, Addr lineAddr, Addr loadPC, Flag is_hit);
 /*************************************************************/
 /* Misc functions */

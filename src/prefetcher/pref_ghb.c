@@ -79,22 +79,21 @@ void pref_ghb_init(HWP* hwp) {
 
   if (PREF_UMLC_ON) {
     ghb_prefetchers_array.ghb_hwp_core_umlc = (Pref_GHB*)malloc(sizeof(Pref_GHB) * NUM_CORES);
-    ghb_prefetchers_array.ghb_hwp_core_umlc->type = UMLC;
-    init_ghb_core(hwp, ghb_prefetchers_array.ghb_hwp_core_umlc);
+    init_ghb_core(hwp, ghb_prefetchers_array.ghb_hwp_core_umlc, UMLC);
   }
   if (PREF_UL1_ON) {
     ghb_prefetchers_array.ghb_hwp_core_ul1 = (Pref_GHB*)malloc(sizeof(Pref_GHB) * NUM_CORES);
-    ghb_prefetchers_array.ghb_hwp_core_ul1->type = UL1;
-    init_ghb_core(hwp, ghb_prefetchers_array.ghb_hwp_core_ul1);
+    init_ghb_core(hwp, ghb_prefetchers_array.ghb_hwp_core_ul1, UL1);
   }
 }
 
-void init_ghb_core(HWP* hwp, Pref_GHB* ghb_hwp_core) {
+void init_ghb_core(HWP* hwp, Pref_GHB* ghb_hwp_core, CacheLevel type) {
   int ii;
   uns8 proc_id;
   for (proc_id = 0; proc_id < NUM_CORES; proc_id++) {
     ghb_hwp_core[proc_id].hwp_info = hwp->hwp_info;
     ghb_hwp_core[proc_id].hwp_info->enabled = TRUE;
+    ghb_hwp_core[proc_id].type = type;
     ghb_hwp_core[proc_id].index_table =
         (GHB_Index_Table_Entry*)malloc(sizeof(GHB_Index_Table_Entry) * PREF_GHB_INDEX_N);
     ghb_hwp_core[proc_id].ghb_buffer = (GHB_Entry*)malloc(sizeof(GHB_Entry) * PREF_GHB_BUFFER_N);
