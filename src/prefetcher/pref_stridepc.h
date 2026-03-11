@@ -52,6 +52,7 @@ typedef struct Pref_StridePC_Struct {
 } Pref_StridePC;
 
 typedef struct {
+  Pref_StridePC* stridepc_hwp_core_dl0;
   Pref_StridePC* stridepc_hwp_core_ul1;
   Pref_StridePC* stridepc_hwp_core_umlc;
 } stridepc_prefetchers;
@@ -60,6 +61,8 @@ typedef struct {
 /* HWP Interface */
 void pref_stridepc_init(HWP* hwp);
 
+void pref_stridepc_dl0_hit(Addr lineAddr, Addr loadPC);
+void pref_stridepc_dl0_miss(Addr lineAddr, Addr loadPC);
 void pref_stridepc_ul1_miss(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_hist);
 void pref_stridepc_ul1_hit(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_hist);
 void pref_stridepc_umlc_miss(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_hist);
@@ -67,7 +70,7 @@ void pref_stridepc_umlc_hit(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 glob
 
 /*************************************************************/
 /* Internal Function */
-void init_stridepc(HWP* hwp, Pref_StridePC* stridepc_hwp_core);
+void init_stridepc(HWP* hwp, Pref_StridePC* stridepc_hwp_core, CacheLevel type);
 void pref_stridepc_train(Pref_StridePC* stridepc_hwp, uns8 proc_id, Addr lineAddr, Addr loadPC, Flag is_hit);
 /*************************************************************/
 /* Misc functions */

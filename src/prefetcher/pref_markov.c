@@ -72,27 +72,35 @@ void pref_markov_init(HWP* hwp) {
     return;
   hwp->hwp_info->enabled = TRUE;
 
+  if (PREF_DL0_ON) {
+    markov_prefetchers_array.markov_hwp_core_dl0 = (Pref_Markov*)malloc(sizeof(Pref_Markov) * NUM_CORES);
+    markov_prefetchers_array.last_miss_addr_core_dl0 = malloc(sizeof(Addr) * NUM_CORES);
+    init_markov(hwp, markov_prefetchers_array.markov_hwp_core_dl0, markov_prefetchers_array.last_miss_addr_core_dl0,
+                DL0);
+  }
+
   if (PREF_UMLC_ON) {
     markov_prefetchers_array.markov_hwp_core_umlc = (Pref_Markov*)malloc(sizeof(Pref_Markov) * NUM_CORES);
-    markov_prefetchers_array.markov_hwp_core_umlc->type = UMLC;
     markov_prefetchers_array.last_miss_addr_core_umlc = malloc(sizeof(Addr) * NUM_CORES);
-    init_markov(hwp, markov_prefetchers_array.markov_hwp_core_umlc, markov_prefetchers_array.last_miss_addr_core_umlc);
+    init_markov(hwp, markov_prefetchers_array.markov_hwp_core_umlc, markov_prefetchers_array.last_miss_addr_core_umlc,
+                UMLC);
   }
   if (PREF_UL1_ON) {
     markov_prefetchers_array.markov_hwp_core_ul1 = (Pref_Markov*)malloc(sizeof(Pref_Markov) * NUM_CORES);
-    markov_prefetchers_array.markov_hwp_core_ul1->type = UL1;
     markov_prefetchers_array.last_miss_addr_core_ul1 = malloc(sizeof(Addr) * NUM_CORES);
-    init_markov(hwp, markov_prefetchers_array.markov_hwp_core_ul1, markov_prefetchers_array.last_miss_addr_core_ul1);
+    init_markov(hwp, markov_prefetchers_array.markov_hwp_core_ul1, markov_prefetchers_array.last_miss_addr_core_ul1,
+                UL1);
   }
 }
 
-void init_markov(HWP* hwp, Pref_Markov* markov_hwp_core, Addr* last_miss_addr_core) {
+void init_markov(HWP* hwp, Pref_Markov* markov_hwp_core, Addr* last_miss_addr_core, CacheLevel type) {
   uns ii, jj, proc_id;
   Pref_Markov* markov_hwp;
   for (proc_id = 0; proc_id < NUM_CORES; proc_id++) {
     last_miss_addr_core[proc_id] = 0;
     markov_hwp = &markov_hwp_core[proc_id];
     markov_hwp->hwp_info = hwp->hwp_info;
+    markov_hwp->type = type;
 
     markov_hwp->markov_table = (Markov_Table_Entry**)calloc(PREF_MARKOV_NUM_ENTRIES, sizeof(Markov_Table_Entry*));
     for (ii = 0; ii < PREF_MARKOV_NUM_ENTRIES; ii++) {
@@ -106,6 +114,24 @@ void init_markov(HWP* hwp, Pref_Markov* markov_hwp_core, Addr* last_miss_addr_co
       }
     }
   }
+}
+
+void pref_markov_dl0_prefhit(Addr lineAddr, Addr load_PC) {
+  uns8 proc_id = get_proc_id_from_cmp_addr(lineAddr);
+  if (PREF_MARKOV_UPDATE_ON_PREF_HIT) {
+    pref_markov_update_table(&markov_prefetchers_array.markov_hwp_core_dl0[proc_id], markov_prefetchers_array.last_miss_addr_core_dl0,
+                             proc_id, lineAddr, 0);
+  }
+  if (PREF_MARKOV_SEND_ON_PREF_HIT) {
+    pref_markov_send_prefetches(&markov_prefetchers_array.markov_hwp_core_dl0[proc_id], proc_id, lineAddr);
+  }
+}
+
+void pref_markov_dl0_miss(Addr lineAddr, Addr load_PC) {
+  uns8 proc_id = get_proc_id_from_cmp_addr(lineAddr);
+  pref_markov_update_table(&markov_prefetchers_array.markov_hwp_core_dl0[proc_id], markov_prefetchers_array.last_miss_addr_core_dl0,
+                           proc_id, lineAddr, 1);
+  pref_markov_send_prefetches(&markov_prefetchers_array.markov_hwp_core_dl0[proc_id], proc_id, lineAddr);
 }
 
 void pref_markov_ul1_prefhit(uns8 proc_id, Addr lineAddr, Addr load_PC, uns32 global_hist) {
@@ -219,9 +245,11 @@ void pref_markov_send_prefetches(Pref_Markov* markov_hwp, uns8 proc_id, Addr mis
         if (markov_hwp->type == UMLC)
           pref_addto_umlc_req_queue(proc_id, markov_hwp->markov_table[table_index][ii].next_addr >> LOG2(L1_LINE_SIZE),
                                     markov_hwp->hwp_info->id);
-        else
+        else if (markov_hwp->type == UL1)
           pref_addto_ul1req_queue(proc_id, markov_hwp->markov_table[table_index][ii].next_addr >> LOG2(L1_LINE_SIZE),
                                   markov_hwp->hwp_info->id);
+        else
+          pref_addto_dl0req_queue(proc_id, markov_hwp->markov_table[table_index][ii].next_addr >> LOG2(L1_LINE_SIZE), markov_hwp->hwp_info->id);
       }
     } else
       break;

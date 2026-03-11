@@ -72,26 +72,41 @@ void pref_stridepc_init(HWP* hwp) {
     return;
   hwp->hwp_info->enabled = TRUE;
 
+
+  if (PREF_DL0_ON) {
+    stridepc_prefetche_array.stridepc_hwp_core_dl0 = (Pref_StridePC*)malloc(sizeof(Pref_StridePC) * NUM_CORES);
+    init_stridepc(hwp, stridepc_prefetche_array.stridepc_hwp_core_dl0, DL0);
+  }
+
   if (PREF_UMLC_ON) {
     stridepc_prefetche_array.stridepc_hwp_core_umlc = (Pref_StridePC*)malloc(sizeof(Pref_StridePC) * NUM_CORES);
-    stridepc_prefetche_array.stridepc_hwp_core_umlc->type = UMLC;
-    init_stridepc(hwp, stridepc_prefetche_array.stridepc_hwp_core_umlc);
+    init_stridepc(hwp, stridepc_prefetche_array.stridepc_hwp_core_umlc, UMLC);
   }
   if (PREF_UL1_ON) {
     stridepc_prefetche_array.stridepc_hwp_core_ul1 = (Pref_StridePC*)malloc(sizeof(Pref_StridePC) * NUM_CORES);
-    stridepc_prefetche_array.stridepc_hwp_core_ul1->type = UL1;
-    init_stridepc(hwp, stridepc_prefetche_array.stridepc_hwp_core_ul1);
+    init_stridepc(hwp, stridepc_prefetche_array.stridepc_hwp_core_ul1, UL1);
   }
 }
 
-void init_stridepc(HWP* hwp, Pref_StridePC* stridepc_hwp_core) {
+void init_stridepc(HWP* hwp, Pref_StridePC* stridepc_hwp_core, CacheLevel type) {
   uns8 proc_id;
 
   for (proc_id = 0; proc_id < NUM_CORES; proc_id++) {
     stridepc_hwp_core[proc_id].hwp_info = hwp->hwp_info;
+    stridepc_hwp_core[proc_id].type = type;
     stridepc_hwp_core[proc_id].stride_table =
         (StridePC_Table_Entry*)calloc(PREF_STRIDEPC_TABLE_N, sizeof(StridePC_Table_Entry));
   }
+}
+
+void pref_stridepc_dl0_hit(Addr lineAddr, Addr loadPC) {
+  uns8 proc_id = get_proc_id_from_cmp_addr(lineAddr);
+  pref_stridepc_train(&stridepc_prefetche_array.stridepc_hwp_core_dl0[proc_id], proc_id, lineAddr, loadPC, TRUE);
+}
+
+void pref_stridepc_dl0_miss(Addr lineAddr, Addr loadPC) {
+  uns8 proc_id = get_proc_id_from_cmp_addr(lineAddr);
+  pref_stridepc_train(&stridepc_prefetche_array.stridepc_hwp_core_dl0[proc_id], proc_id, lineAddr, loadPC, FALSE);
 }
 
 void pref_stridepc_ul1_hit(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_hist) {
@@ -194,10 +209,15 @@ void pref_stridepc_train(Pref_StridePC* stridepc_hwp, uns8 proc_id, Addr lineAdd
                   stridepc_hwp->hwp_info->id)) {
             break;
           }
-        } else {
+        } else if (stridepc_hwp->type == UL1) {
           if (!pref_addto_ul1req_queue(
                   proc_id, (PREF_STRIDEPC_USELOADADDR ? (pref_index >> LOG2(DCACHE_LINE_SIZE)) : pref_index),
                   stridepc_hwp->hwp_info->id))  // FIXME
+            break;
+        } else {
+          if (!pref_addto_dl0req_queue(
+                  proc_id, (PREF_STRIDEPC_USELOADADDR ? (pref_index >> LOG2(DCACHE_LINE_SIZE)) : pref_index),
+                  stridepc_hwp->hwp_info->id))
             break;
         }
 
