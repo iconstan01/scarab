@@ -24,7 +24,6 @@
 
 /* Global Variables */
 Decoupled_FE* g_dfe = nullptr;
-static int fwd_progress = 0;
 
 // Per core decoupled frontend
 std::vector<std::vector<std::unique_ptr<Decoupled_FE>>> per_core_dfe;
@@ -196,6 +195,7 @@ void Decoupled_FE::init(uns _proc_id, uns _bp_id, Bp_Data* _bp_data, uns _dfe_re
   dfe_recovery_policy = _dfe_recovery_policy;
   cur_op = nullptr;
   current_ft_to_push = nullptr;
+  fwd_progress = 0;
 
   if (CONFIDENCE_ENABLE) {
     if (bp_id != MAIN_BP)
@@ -356,7 +356,7 @@ void Decoupled_FE::update() {
     fwd_progress++;
     if (fwd_progress >= 1000000) {
       std::cout << "No forward progress for 1000000 cycles" << std::endl;
-      ASSERT(0, 0);
+      ASSERT(proc_id, 0);
     }
     if (is_off_path_state())
       STAT_EVENT(proc_id, FTQ_CYCLES_OFFPATH);
