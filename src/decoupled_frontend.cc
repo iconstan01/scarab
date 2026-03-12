@@ -376,6 +376,10 @@ void Decoupled_FE::update() {
     if (ftq.size() == ftq_max_size()) {
       DEBUG(proc_id, "[DFE%u] Break due to full FTQ\n", bp_id);
       STAT_EVENT(proc_id, FTQ_BREAK_FULL_FT_ONPATH + is_off_path_state());
+      if (bp_id == MAIN_BP) {
+        // Full FTQ is backpressure from the consumer side, not a DFE-local stall.
+        fwd_progress = 0;
+      }
       break;
     }
     if (cfs_taken_this_cycle >= FE_FTQ_TAKEN_CFS_PER_CYCLE) {
