@@ -182,6 +182,7 @@ class Decoupled_FE {
         redirect_cycle(0),
         ftq_ft_num(FE_FTQ_BLOCK_NUM),
         trace_mode(false),
+        fwd_progress(0),
         state(INACTIVE),
         next_state(INACTIVE) {}
   void init(uns proc_id, uns bp_id, Bp_Data* bp_data, uns dfe_recovery_policy);
@@ -262,6 +263,7 @@ class Decoupled_FE {
   bool trace_mode;
   Op* cur_op;
   Conf* conf;
+  uint64_t fwd_progress;
 
   DFE_STATE state;       // FSM state (applied each update)
   DFE_STATE next_state;  // requested next state, applied inside update()
