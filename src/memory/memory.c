@@ -4266,6 +4266,7 @@ Flag l1_fill_line(Mem_Req* req) {
                                (req->type == MRT_DPRF))) {  // ONURP: Add prefetches
     ASSERT(0, ADDR_TRANSLATION == ADDR_TRANS_NONE);
     data = (L1_Data*)cache_insert(&mem->pref_l1_cache, req->proc_id, req->addr, &line_addr, &repl_line_addr);
+    data->proc_id = req->proc_id;
     STAT_EVENT(req->proc_id, L1_PREF_CACHE_FILL);
     req->l1_miss_satisfied = TRUE;
 
@@ -4437,10 +4438,12 @@ Flag l1_fill_line(Mem_Req* req) {
     }
     data = (L1_Data*)cache_insert_replpos(&L1(req->proc_id)->cache, req->proc_id, req->addr, &line_addr,
                                           &repl_line_addr, mem->pref_replpos, TRUE);
+    data->proc_id = req->proc_id;
     if (repl_line_addr && (!data->prefetch || (data->prefetch && data->seen_prefetch)))  // Prefetch kicks out demand
       pref_ul1evictOnPF(req->proc_id, repl_line_addr, data->proc_id);
   } else {
     data = (L1_Data*)cache_insert(&L1(req->proc_id)->cache, req->proc_id, req->addr, &line_addr, &repl_line_addr);
+    data->proc_id = req->proc_id;
   }
 
   STAT_EVENT(req->proc_id, NORESET_L1_FILL);
