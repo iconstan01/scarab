@@ -30,6 +30,10 @@ static inline Bp_Pred_Info* cbp_get_bp_pred_info(Op* op, Bp_Pred_Level pred_leve
   return (pred_level == BP_PRED_L0) ? &op->bp_pred_l0 : &op->bp_pred_main;
 }
 
+static inline uns cbp_get_bp_id(const Op* op) {
+  return (op && op->parent_FT) ? op->parent_FT->get_bp_id() : MAIN_BP;
+}
+
 template <typename CBP_CLASS>
 class CBP_To_Scarab_Intf {
   std::vector<std::vector<CBP_CLASS>> cbp_predictors_all_cores;
@@ -66,7 +70,7 @@ class CBP_To_Scarab_Intf {
   uns8 pred(Op* op, Bp_Pred_Level pred_level) {
     (void)pred_level;
     uns proc_id = op->proc_id;
-    uns bp_id = op->parent_FT->get_bp_id();
+    uns bp_id = cbp_get_bp_id(op);
     if (op->off_path)
       return op->oracle_info.dir;
     return cbp_predictors_all_cores.at(proc_id).at(bp_id).GetPrediction(op->inst_info->addr, &op->bp_confidence);
@@ -79,7 +83,7 @@ class CBP_To_Scarab_Intf {
       return;
 
     uns proc_id = op->proc_id;
-    uns bp_id = op->parent_FT->get_bp_id();
+    uns bp_id = cbp_get_bp_id(op);
     OpType optype = scarab_to_cbp_optype(op->table_info->cf_type);
 
     if (is_conditional_branch(op->table_info->cf_type)) {
@@ -109,7 +113,7 @@ template <>
 uns8 CBP_To_Scarab_Intf<TAGE64K>::pred(Op* op, Bp_Pred_Level pred_level) {
   (void)pred_level;
   uns proc_id = op->proc_id;
-  uns bp_id = op->parent_FT->get_bp_id();
+  uns bp_id = cbp_get_bp_id(op);
   if (op->off_path)
     if (SPEC_LEVEL < BP_PRED_ONOFF_SPEC_UPDATE_S_ONOFF_N_ON)
       return op->oracle_info.dir;
@@ -122,7 +126,7 @@ template <>
 void CBP_To_Scarab_Intf<TAGE64K>::spec_update(Op* op, Bp_Pred_Level pred_level) {
   Bp_Pred_Info* bp_pred_info = cbp_get_bp_pred_info(op, pred_level);
   uns proc_id = op->proc_id;
-  uns bp_id = op->parent_FT->get_bp_id();
+  uns bp_id = cbp_get_bp_id(op);
   OpType optype = scarab_to_cbp_optype(op->table_info->cf_type);
   Flag is_conditional = is_conditional_branch(op->table_info->cf_type);
   Flag pred_dir =
@@ -192,7 +196,7 @@ void CBP_To_Scarab_Intf<TAGE64K>::update(Op* op,
     return;
 
   uns proc_id = op->proc_id;
-  uns bp_id = op->parent_FT->get_bp_id();
+  uns bp_id = cbp_get_bp_id(op);
   OpType optype = scarab_to_cbp_optype(op->table_info->cf_type);
   Flag is_conditional = is_conditional_branch(op->table_info->cf_type);
 
@@ -207,10 +211,10 @@ void CBP_To_Scarab_Intf<TAGE64K>::update(Op* op,
 
 template <>
 void CBP_To_Scarab_Intf<TAGE64K>::retire(Op* op) {
-  if (SPEC_LEVEL == BP_PRED_ON || op->parent_FT->get_bp_id() == 0)
+  if (SPEC_LEVEL == BP_PRED_ON || cbp_get_bp_id(op) == 0)
     return;
   uns proc_id = op->proc_id;
-  uns bp_id = op->parent_FT->get_bp_id();
+  uns bp_id = cbp_get_bp_id(op);
   cbp_predictors_all_cores.at(proc_id).at(bp_id).RetireCheckpoint(op->recovery_info.branch_id);
 }
 
@@ -230,7 +234,7 @@ void CBP_To_Scarab_Intf<TAGE64K>::recover(Recovery_Info* recovery_info) {
 template <>
 void CBP_To_Scarab_Intf<TAGE64K>::timestamp(Op* op) {
   uns proc_id = op->proc_id;
-  uns bp_id = op->parent_FT->get_bp_id();
+  uns bp_id = cbp_get_bp_id(op);
   op->recovery_info.branch_id = cbp_predictors_all_cores.at(proc_id).at(bp_id).KeyGeneration();
 }
 
