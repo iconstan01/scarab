@@ -57,6 +57,8 @@ typedef struct Pref_Polbv_Info_struct {
 struct HWP_Info_struct {
   uns8 id;       // This prefetcher's id
   Flag enabled;  // Is the prefetcher enabled
+  Flag enabled_by_knob;           // enabled via legacy per-prefetcher knob (e.g., pref_stream_on)
+  Flag enabled_by_level_binding;  // enabled due to pref_<level>_mech binding
   int priority;  // priority this prefetcher gets in the pecking order
 
   // Feedback direted prefetching
