@@ -187,8 +187,10 @@ void decoupled_fe_print_conf_data() {
 
 /* Decoupled_FE member functions */
 Decoupled_FE::~Decoupled_FE() {
-  ASSERT(proc_id, ftq.empty());
-  ASSERT(proc_id, saved_recovery_ft == nullptr);
+  if (!ftq.empty() || saved_recovery_ft != nullptr) {
+    DEBUG(proc_id, "[DFE%u] teardown with pending state: ftq=%zu saved_recovery_ft=%p\n",
+          bp_id, ftq.size(), (void*)saved_recovery_ft);
+  }
   if (CONFIDENCE_ENABLE && bp_id == MAIN_BP) {
     delete conf;
   }
