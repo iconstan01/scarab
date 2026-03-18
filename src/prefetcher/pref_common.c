@@ -130,7 +130,6 @@ static void pref_update_core(uns proc_id);
 static void pref_polbv_update_on_evict(uns8 pref_proc_id, uns8 evicted_proc_id, Addr evicted_addr);
 static void pref_polbv_lookup_on_miss(uns8 proc_id, Addr addr);
 static void pref_polbv_update_on_repref(uns8 proc_id, Addr addr);
-static const char* pref_level_name(CacheLevel level);
 static int pref_find_hwp_by_name(const char* mech_name);
 static Pref_Level_Dispatch pref_resolve_level_dispatch(const char* mech_name, const char* knob_name, CacheLevel level);
 static Pref_Mech_Knob_Snapshot pref_capture_mech_knob_snapshot(void);
@@ -152,19 +151,6 @@ int pref_compare_prefloadhash(const void* const a, const void* const b) {
   Pref_LoadPCInfo** dataB = (Pref_LoadPCInfo**)b;
 
   return ((*dataB)->count - (*dataA)->count);
-}
-
-static const char* pref_level_name(CacheLevel level) {
-  switch (level) {
-    case DL0:
-      return "DL0";
-    case UMLC:
-      return "UMLC";
-    case UL1:
-      return "UL1";
-    default:
-      return "UNKNOWN";
-  }
 }
 
 static int pref_find_hwp_by_name(const char* mech_name) {
@@ -197,7 +183,7 @@ static Pref_Level_Dispatch pref_resolve_level_dispatch(const char* mech_name, co
 
   dispatch.mode = PREF_LEVEL_DISPATCH_BOUND;
   dispatch.hwp_index = hwp_idx;
-  DEBUG(0, "Bound %s prefetch dispatch to mechanism '%s'\n", pref_level_name(level), mech_name);
+  DEBUG(0, "Bound prefetch dispatch for level %u to mechanism '%s'\n", (unsigned)level, mech_name);
   return dispatch;
 }
 
