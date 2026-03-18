@@ -45,6 +45,12 @@
 #include "memory/memory.param.h"
 #include "prefetcher//stream.param.h"
 #include "prefetcher/pref.param.h"
+#include "prefetcher/pref_2dc.param.h"
+#include "prefetcher/pref_ghb.param.h"
+#include "prefetcher/pref_markov.param.h"
+#include "prefetcher/pref_phase.param.h"
+#include "prefetcher/pref_stride.param.h"
+#include "prefetcher/pref_stridepc.param.h"
 
 #include "libs/cache_lib.h"
 #include "libs/hash_lib.h"
