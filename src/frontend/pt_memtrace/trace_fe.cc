@@ -88,6 +88,9 @@ void buf_map_remove(uns proc_id) {
 }
 
 void off_path_generate_inst(uns proc_id, uint64_t *off_path_addr, ctype_pin_inst *inst) {
+  // pc_to_inst keys are untagged trace PCs, while redirect targets may carry CMP core tagging.
+  // Normalize to untagged address space for off-path map lookup on all cores.
+  *off_path_addr = convert_to_cmp_addr(0, *off_path_addr);
   auto op_iter = pc_to_inst[proc_id].find(*off_path_addr);
   if (op_iter != pc_to_inst[proc_id].end()) {
     *inst = op_iter->second;
@@ -327,7 +330,8 @@ void ext_trace_redirect(uns proc_id, uns bp_id, uns64 inst_uid, Addr fetch_addr)
     off_path_mode[proc_id][bp_id] = false;
   else
     off_path_mode[proc_id][bp_id] = true;
-  off_path_addr[proc_id][bp_id] = fetch_addr;
+  // Store off-path cursor in untagged space; uop generation will retag per core.
+  off_path_addr[proc_id][bp_id] = convert_to_cmp_addr(0, fetch_addr);
   off_path_generate_inst(proc_id, &off_path_addr[proc_id][bp_id], &next_offpath_pi[proc_id][bp_id]);
   DEBUG(proc_id, "Redirect on-path:%lx off-path:%lx", next_onpath_pi[proc_id].instruction_addr,
         next_offpath_pi[proc_id][bp_id].instruction_addr);
