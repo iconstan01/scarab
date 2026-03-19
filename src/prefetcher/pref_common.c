@@ -740,7 +740,7 @@ Flag pref_umlc_req_queue_filter(Addr line_addr) {
     if (umlc_req_queue[ii].valid &&
         (umlc_req_queue[ii].line_addr >> LOG2(DCACHE_LINE_SIZE)) == (line_addr >> LOG2(DCACHE_LINE_SIZE))) {
       umlc_req_queue[ii].valid = FALSE;
-      STAT_EVENT(0, PREF_UMLC_REQ_QUEUE_HIT_BY_DEMAND);
+      STAT_EVENT(proc_id, PREF_UMLC_REQ_QUEUE_HIT_BY_DEMAND);
       return TRUE;
     }
   }
@@ -756,7 +756,7 @@ Flag pref_ul1req_queue_filter(Addr line_addr) {
     if (ul1req_queue[ii].valid &&
         (ul1req_queue[ii].line_addr >> LOG2(DCACHE_LINE_SIZE)) == (line_addr >> LOG2(DCACHE_LINE_SIZE))) {
       ul1req_queue[ii].valid = FALSE;
-      STAT_EVENT(0, PREF_UL1REQ_QUEUE_HIT_BY_DEMAND);
+      STAT_EVENT(proc_id, PREF_UL1REQ_QUEUE_HIT_BY_DEMAND);
       return TRUE;
     }
   }
@@ -819,7 +819,7 @@ Flag pref_addto_umlc_req_queue(uns8 proc_id, Addr line_index, uns8 prefetcher_id
   if (PREF_UMLC_REQ_ADD_FILTER_ON) {
     for (ii = 0; ii < PREF_UMLC_REQ_QUEUE_SIZE; ii++) {
       if (umlc_req_queue[ii].line_index == line_index) {
-        STAT_EVENT(0, PREF_UMLC_REQ_QUEUE_MATCHED_REQ);
+        STAT_EVENT(proc_id, PREF_UMLC_REQ_QUEUE_MATCHED_REQ);
         return TRUE;  // Hit another request
       }
     }
@@ -867,7 +867,7 @@ Flag pref_addto_ul1req_queue_set(uns8 proc_id, Addr line_index, uns8 prefetcher_
   if (PREF_UL1REQ_ADD_FILTER_ON) {
     for (ii = 0; ii < PREF_UL1REQ_QUEUE_SIZE; ii++) {
       if (ul1req_queue[ii].line_index == line_index) {
-        STAT_EVENT(0, PREF_UL1REQ_QUEUE_MATCHED_REQ);
+        STAT_EVENT(proc_id, PREF_UL1REQ_QUEUE_MATCHED_REQ);
         return TRUE;  // Hit another request
       }
     }
@@ -1036,10 +1036,10 @@ void pref_update_core(uns proc_id) {
           new_mem_req(MRT_DPRF, proc_id, umlc_req_queue[q_index].line_addr, MLC_LINE_SIZE, 1, NULL, NULL, unique_count,
                       &info)) {  // CMP maybe unique_count_per_core[proc_id]?
         DEBUG(0, "Sent req %llx to umlc Qpos:%d\n", umlc_req_queue[q_index].line_index, *umlc_req_queue_send_pos);
-        STAT_EVENT(0, PREF_UMLC_REQ_QUEUE_SENTREQ);
+        STAT_EVENT(proc_id, PREF_UMLC_REQ_QUEUE_SENTREQ);
         umlc_req_queue[q_index].valid = FALSE;
       } else {
-        STAT_EVENT(0, PREF_UMLC_REQ_SEND_QUEUE_STALL);
+        STAT_EVENT(proc_id, PREF_UMLC_REQ_SEND_QUEUE_STALL);
         inc_send_pos = FALSE;
         break;  // buffer is full. wait!!
       }
@@ -1086,10 +1086,10 @@ void pref_update_core(uns proc_id) {
       if ((model->mem == MODEL_MEM) && new_mem_req(MRT_DPRF, proc_id, ul1req_queue[q_index].line_addr, L1_LINE_SIZE, 1,
                                                    NULL, NULL, unique_count, &info)) {  // CMP maybe unique_count_per_core[proc_id]?
         DEBUG(0, "Sent req %llx to ul1 Qpos:%d\n", ul1req_queue[q_index].line_index, *ul1req_queue_send_pos);
-        STAT_EVENT(0, PREF_UL1REQ_QUEUE_SENTREQ);
+        STAT_EVENT(proc_id, PREF_UL1REQ_QUEUE_SENTREQ);
         ul1req_queue[q_index].valid = FALSE;
       } else {
-        STAT_EVENT(0, PREF_UL1REQ_SEND_QUEUE_STALL);
+        STAT_EVENT(proc_id, PREF_UL1REQ_SEND_QUEUE_STALL);
         inc_send_pos = FALSE;
         break;  // buffer is full. wait!!
       }
