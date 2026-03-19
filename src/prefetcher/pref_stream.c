@@ -484,23 +484,23 @@ void pref_stream_throttle(Pref_Stream* pref_stream, uns8 proc_id) {
   }
   if (acc == 1.0) {
     pref_stream->distance = 64;
-    STAT_EVENT(0, PREF_DISTANCE_4);
+    STAT_EVENT(proc_id, PREF_DISTANCE_4);
   } else {
     if (dyn_shift >= 2) {
       pref_stream->distance = 128;
-      STAT_EVENT(0, PREF_DISTANCE_5);
+      STAT_EVENT(proc_id, PREF_DISTANCE_5);
     } else if (dyn_shift == 1) {
       pref_stream->distance = 64;
-      STAT_EVENT(0, PREF_DISTANCE_4);
+      STAT_EVENT(proc_id, PREF_DISTANCE_4);
     } else if (dyn_shift == 0) {
       pref_stream->distance = 32;
-      STAT_EVENT(0, PREF_DISTANCE_3);
+      STAT_EVENT(proc_id, PREF_DISTANCE_3);
     } else if (dyn_shift == -1) {
       pref_stream->distance = 16;
-      STAT_EVENT(0, PREF_DISTANCE_2);
+      STAT_EVENT(proc_id, PREF_DISTANCE_2);
     } else if (dyn_shift <= -2) {
       pref_stream->distance = 5;
-      STAT_EVENT(0, PREF_DISTANCE_1);
+      STAT_EVENT(proc_id, PREF_DISTANCE_1);
     }
   }
 }

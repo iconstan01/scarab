@@ -1023,7 +1023,7 @@ void pref_update_core(uns proc_id) {
       // check if there is enough space in the mem req buffer
       if ((model->mem == MODEL_MEM) && ((MEM_REQ_BUFFER_ENTRIES - mem_get_req_count(proc_id)) <
                                         PREF_L1Q_DEMAND_RESERVE)) {  // really req buffer demand reserve
-        STAT_EVENT(0, PREF_MLCQ_STALL);
+        STAT_EVENT(proc_id, PREF_MLCQ_STALL);
         if (PREF_REQ_DROP && MEM_REQ_BUFFER_ENTRIES == mem_get_req_count(proc_id)) {
           umlc_req_queue[q_index].valid = FALSE;
         } else {
@@ -1075,7 +1075,7 @@ void pref_update_core(uns proc_id) {
       // check if there is enough space in the mem req buffer
       if ((model->mem == MODEL_MEM) &&
           ((MEM_REQ_BUFFER_ENTRIES - mem_get_req_count(proc_id)) < PREF_L1Q_DEMAND_RESERVE)) {
-        STAT_EVENT(0, PREF_L1Q_STALL);
+        STAT_EVENT(proc_id, PREF_L1Q_STALL);
         if (PREF_REQ_DROP && MEM_REQ_BUFFER_ENTRIES == mem_get_req_count(proc_id)) {
           ul1req_queue[q_index].valid = FALSE;
         } else {

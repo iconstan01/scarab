@@ -88,7 +88,7 @@ void pref_ghb_train(Pref_GHB* ghb_hwp, uns8 proc_id, Addr lineAddr, Addr loadPC,
 /* Misc functions */
 void pref_ghb_create_newentry(Pref_GHB* ghb_hwp, int idx, Addr line_addr, Addr czone_tag, int old_ptr);
 
-void pref_ghb_throttle(Pref_GHB* ghb_hwp);
-void pref_ghb_throttle_fb(Pref_GHB* ghb_hwp);
+void pref_ghb_throttle(Pref_GHB* ghb_hwp, uns8 proc_id);
+void pref_ghb_throttle_fb(Pref_GHB* ghb_hwp, uns8 proc_id);
 
 #endif /*  __PREF_GHB_H__*/

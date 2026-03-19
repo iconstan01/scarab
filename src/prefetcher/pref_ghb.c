@@ -188,10 +188,10 @@ void pref_ghb_train(Pref_GHB* ghb_hwp, uns8 proc_id, Addr lineAddr, Addr loadPC,
     return;
   }
   if (PREF_THROTTLE_ON) {
-    pref_ghb_throttle(ghb_hwp);
+    pref_ghb_throttle(ghb_hwp, proc_id);
   }
   if (PREF_THROTTLEFB_ON) {
-    pref_ghb_throttle_fb(ghb_hwp);
+    pref_ghb_throttle_fb(ghb_hwp, proc_id);
   }
 
   pref_ghb_create_newentry(ghb_hwp, czone_idx, lineAddr, index_tag, old_ptr);
@@ -301,10 +301,10 @@ void pref_ghb_create_newentry(Pref_GHB* ghb_hwp, int idx, Addr line_addr, Addr c
   ghb_hwp->index_table[idx].ghb_ptr = ghb_hwp->ghb_tail;
 }
 
-void pref_ghb_throttle(Pref_GHB* ghb_hwp) {
+void pref_ghb_throttle(Pref_GHB* ghb_hwp, uns8 proc_id) {
   int dyn_shift = 0;
 
-  float acc = pref_get_accuracy(0, ghb_hwp->hwp_info->id);  // FIXME
+  float acc = pref_get_accuracy(proc_id, ghb_hwp->hwp_info->id);
 
   if (acc != 1.0) {
     if (acc > PREF_ACC_THRESH_1) {
@@ -321,25 +321,25 @@ void pref_ghb_throttle(Pref_GHB* ghb_hwp) {
   }
   // COLLECT STATS
   if (acc > 0.9) {
-    STAT_EVENT(0, PREF_ACC_1);
+    STAT_EVENT(proc_id, PREF_ACC_1);
   } else if (acc > 0.8) {
-    STAT_EVENT(0, PREF_ACC_2);
+    STAT_EVENT(proc_id, PREF_ACC_2);
   } else if (acc > 0.7) {
-    STAT_EVENT(0, PREF_ACC_3);
+    STAT_EVENT(proc_id, PREF_ACC_3);
   } else if (acc > 0.6) {
-    STAT_EVENT(0, PREF_ACC_4);
+    STAT_EVENT(proc_id, PREF_ACC_4);
   } else if (acc > 0.5) {
-    STAT_EVENT(0, PREF_ACC_5);
+    STAT_EVENT(proc_id, PREF_ACC_5);
   } else if (acc > 0.4) {
-    STAT_EVENT(0, PREF_ACC_6);
+    STAT_EVENT(proc_id, PREF_ACC_6);
   } else if (acc > 0.3) {
-    STAT_EVENT(0, PREF_ACC_7);
+    STAT_EVENT(proc_id, PREF_ACC_7);
   } else if (acc > 0.2) {
-    STAT_EVENT(0, PREF_ACC_8);
+    STAT_EVENT(proc_id, PREF_ACC_8);
   } else if (acc > 0.1) {
-    STAT_EVENT(0, PREF_ACC_9);
+    STAT_EVENT(proc_id, PREF_ACC_9);
   } else {
-    STAT_EVENT(0, PREF_ACC_10);
+    STAT_EVENT(proc_id, PREF_ACC_10);
   }
 
   if (acc == 1.0) {
@@ -347,25 +347,26 @@ void pref_ghb_throttle(Pref_GHB* ghb_hwp) {
   } else {
     if (dyn_shift >= 2) {
       ghb_hwp->pref_degree = 64;
-      STAT_EVENT(0, PREF_DISTANCE_5);
+      STAT_EVENT(proc_id, PREF_DISTANCE_5);
     } else if (dyn_shift == 1) {
       ghb_hwp->pref_degree = 32;
-      STAT_EVENT(0, PREF_DISTANCE_4);
+      STAT_EVENT(proc_id, PREF_DISTANCE_4);
     } else if (dyn_shift == 0) {
       ghb_hwp->pref_degree = 16;
-      STAT_EVENT(0, PREF_DISTANCE_3);
+      STAT_EVENT(proc_id, PREF_DISTANCE_3);
     } else if (dyn_shift == -1) {
       ghb_hwp->pref_degree = 8;
-      STAT_EVENT(0, PREF_DISTANCE_2);
+      STAT_EVENT(proc_id, PREF_DISTANCE_2);
     } else if (dyn_shift <= -2) {
       ghb_hwp->pref_degree = 2;
-      STAT_EVENT(0, PREF_DISTANCE_1);
+      STAT_EVENT(proc_id, PREF_DISTANCE_1);
     }
   }
 }
 
-void pref_ghb_throttle_fb(Pref_GHB* ghb_hwp) {
-  pref_get_degfb(0, ghb_hwp->hwp_info->id);                                                             // FIXME
-  ASSERT(0, ghb_hwp->hwp_info->dyn_degree_core[0] >= 0 && ghb_hwp->hwp_info->dyn_degree_core[0] <= 4);  // FIXME
-  ghb_hwp->pref_degree = ghb_hwp->pref_degree_vals[ghb_hwp->hwp_info->dyn_degree_core[0]];              // FIXME
+void pref_ghb_throttle_fb(Pref_GHB* ghb_hwp, uns8 proc_id) {
+  pref_get_degfb(proc_id, ghb_hwp->hwp_info->id);
+  ASSERT(proc_id, ghb_hwp->hwp_info->dyn_degree_core[proc_id] >= 0 &&
+                      ghb_hwp->hwp_info->dyn_degree_core[proc_id] <= 4);
+  ghb_hwp->pref_degree = ghb_hwp->pref_degree_vals[ghb_hwp->hwp_info->dyn_degree_core[proc_id]];
 }
