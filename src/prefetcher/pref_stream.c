@@ -74,6 +74,23 @@ static inline Flag pref_stream_use_per_core_state_effective(void) {
   return PREF_STREAM_PER_CORE_ENABLE || NUM_CORES > 1;
 }
 
+static inline int pref_stream_select_level_override(CacheLevel type, int dl0_val, int umlc_val, int ul1_val) {
+  switch (type) {
+    case DL0:
+      return dl0_val;
+    case UMLC:
+      return umlc_val;
+    case UL1:
+      return ul1_val;
+    default:
+      return -1;
+  }
+}
+
+static inline uns pref_stream_resolve_level_uns(int override_val, uns fallback) {
+  return (override_val >= 0) ? (uns)override_val : fallback;
+}
+
 /**************************************************************************************/
 /* stream prefetcher  */
 /* prefetch is initiated by dcache miss but the request fills the l1 cache
@@ -109,22 +126,34 @@ void pref_stream_init(HWP* hwp) {
 
   if (PREF_DL0_ON) {
     stream_prefetchers_array.pref_stream_core_dl0 = (Pref_Stream*)malloc(sizeof(Pref_Stream) * NUM_CORES);
-    init_stream_core(hwp, stream_prefetchers_array.pref_stream_core_dl0);
+    init_stream_core(hwp, stream_prefetchers_array.pref_stream_core_dl0, DL0);
   }
   if (PREF_UMLC_ON) {
     stream_prefetchers_array.pref_stream_core_umlc = (Pref_Stream*)malloc(sizeof(Pref_Stream) * NUM_CORES);
-    init_stream_core(hwp, stream_prefetchers_array.pref_stream_core_umlc);
+    init_stream_core(hwp, stream_prefetchers_array.pref_stream_core_umlc, UMLC);
   }
   if (PREF_UL1_ON) {
     stream_prefetchers_array.pref_stream_core_ul1 = (Pref_Stream*)malloc(sizeof(Pref_Stream) * NUM_CORES);
-    init_stream_core(hwp, stream_prefetchers_array.pref_stream_core_ul1);
+    init_stream_core(hwp, stream_prefetchers_array.pref_stream_core_ul1, UL1);
   }
 }
 
-void init_stream_core(HWP* hwp, Pref_Stream* pref_stream_core) {
+void init_stream_core(HWP* hwp, Pref_Stream* pref_stream_core, CacheLevel type) {
+  int level_prefetch_n =
+      pref_stream_select_level_override(type, STREAM_PREFETCH_N_DL0, STREAM_PREFETCH_N_UMLC, STREAM_PREFETCH_N_UL1);
+  int level_start_dis =
+      pref_stream_select_level_override(type, STREAM_START_DIS_DL0, STREAM_START_DIS_UMLC, STREAM_START_DIS_UL1);
+  int level_length = pref_stream_select_level_override(type, STREAM_LENGTH_DL0, STREAM_LENGTH_UMLC, STREAM_LENGTH_UL1);
+  int level_full_n = pref_stream_select_level_override(type, STREAM_FULL_N_DL0, STREAM_FULL_N_UMLC, STREAM_FULL_N_UL1);
+  int level_train_num =
+      pref_stream_select_level_override(type, STREAM_TRAIN_NUM_DL0, STREAM_TRAIN_NUM_UMLC, STREAM_TRAIN_NUM_UL1);
+  int level_train_length = pref_stream_select_level_override(type, STREAM_TRAIN_LENGTH_DL0, STREAM_TRAIN_LENGTH_UMLC,
+                                                             STREAM_TRAIN_LENGTH_UL1);
+
   uns8 proc_id;
   for (proc_id = 0; proc_id < NUM_CORES; proc_id++) {
     pref_stream_core[proc_id].hwp_info = hwp->hwp_info;
+    pref_stream_core[proc_id].type = type;
 
     if (pref_stream_use_per_core_state_effective()) {
       pref_stream_core[proc_id].stream = (Stream_Buffer*)calloc(STREAM_BUFFER_N, sizeof(Stream_Buffer));
@@ -135,8 +164,11 @@ void init_stream_core(HWP* hwp, Pref_Stream* pref_stream_core) {
       *(pref_stream_core[proc_id].train_filter_no) = 0;
     }
 
-    pref_stream_core[proc_id].train_num = STREAM_TRAIN_NUM;
-    pref_stream_core[proc_id].distance = STREAM_LENGTH;
+    pref_stream_core[proc_id].train_num = pref_stream_resolve_level_uns(level_train_num, STREAM_TRAIN_NUM);
+    pref_stream_core[proc_id].train_length = pref_stream_resolve_level_uns(level_train_length, STREAM_TRAIN_LENGTH);
+    pref_stream_core[proc_id].start_dis = pref_stream_resolve_level_uns(level_start_dis, STREAM_START_DIS);
+    pref_stream_core[proc_id].distance = pref_stream_resolve_level_uns(level_length, STREAM_LENGTH);
+    pref_stream_core[proc_id].full_n = pref_stream_resolve_level_uns(level_full_n, STREAM_FULL_N);
     pref_stream_core[proc_id].pref_degree_vals[0] = 4;
     pref_stream_core[proc_id].pref_degree_vals[1] = 8;
     pref_stream_core[proc_id].pref_degree_vals[2] = 16;
@@ -144,7 +176,7 @@ void init_stream_core(HWP* hwp, Pref_Stream* pref_stream_core) {
     pref_stream_core[proc_id].pref_degree_vals[4] = 64;
     pref_stream_core[proc_id].pref_degree_vals[5] = 64;
 
-    pref_stream_core[proc_id].num_tosend = STREAM_PREFETCH_N;
+    pref_stream_core[proc_id].num_tosend = pref_stream_resolve_level_uns(level_prefetch_n, STREAM_PREFETCH_N);
     pref_stream_core[proc_id].num_tosend_vals[0] = 1;
     pref_stream_core[proc_id].num_tosend_vals[1] = 1;
     pref_stream_core[proc_id].num_tosend_vals[2] = 2;
@@ -167,6 +199,11 @@ void init_stream_core(HWP* hwp, Pref_Stream* pref_stream_core) {
       pref_stream_core[proc_id].train_filter_no = pref_stream_core[0].train_filter_no;
     }
   }
+
+  DEBUG(0,
+        "stream level init type:%u prefetch_n:%u start_dis:%u length:%u full_n:%u train_num:%u train_length:%u\n",
+        (unsigned)type, pref_stream_core[0].num_tosend, pref_stream_core[0].start_dis, pref_stream_core[0].distance,
+        pref_stream_core[0].full_n, pref_stream_core[0].train_num, pref_stream_core[0].train_length);
 }
 
 void pref_stream_train(Pref_Stream* pref_stream, uns8 proc_id, Addr line_addr, Addr load_PC, uns32 global_hist,
@@ -216,14 +253,14 @@ void pref_stream_train(Pref_Stream* pref_stream, uns8 proc_id, Addr line_addr, A
       /* hit the stream_buffer, request the prefetch */
       uns num_tosend = pref_stream->num_tosend;
       if (stream->buffer_full)
-        num_tosend = MAX2(STREAM_FULL_N, num_tosend);
+        num_tosend = MAX2(pref_stream->full_n, num_tosend);
 
       for (ii = 0; ii < num_tosend; ii++) {
         if ((stream->sp == line_index) && (stream->buffer_full)) {  // when is buffer_full set to FALSE except
                                                                     // for buffer creation?
           // stream prefetch is requesting  enough far ahead
           // stop prefetch and wait until miss address is within the buffer area
-          stream->pause = STREAM_FULL_N;
+          stream->pause = pref_stream->full_n;
           return;
         }
 
@@ -356,7 +393,8 @@ int pref_stream_train_create_stream_buffer(Pref_Stream* pref_stream, uns8 proc_i
     for (ii = 0; ii < STREAM_BUFFER_N; ii++) {
       Stream_Buffer* stream = &pref_stream->stream[ii];
       if (stream->valid && !stream->trained) {
-        if ((stream->sp <= (line_index + STREAM_TRAIN_LENGTH)) && (stream->sp >= (line_index - STREAM_TRAIN_LENGTH))) {
+        if ((stream->sp <= (line_index + pref_stream->train_length)) &&
+            (stream->sp >= (line_index - pref_stream->train_length))) {
           ASSERT(proc_id, proc_id == stream->proc_id);
 
           if (train) {  // do these only if we are training
@@ -369,7 +407,7 @@ int pref_stream_train_create_stream_buffer(Pref_Stream* pref_stream, uns8 proc_i
             if (stream->train_hit > pref_stream->train_num) {
               stream->trained = TRUE;
               stream->start_vline = stream->sp;
-              stream->ep = (dir > 0) ? line_index + STREAM_START_DIS : line_index - STREAM_START_DIS;  // BUG: 57
+              stream->ep = (dir > 0) ? line_index + pref_stream->start_dis : line_index - pref_stream->start_dis;
               // check for address space overflow
               if (get_proc_id_from_cmp_addr(stream->ep << LOG2(DCACHE_LINE_SIZE)) != proc_id) {
                 stream->valid = FALSE;
@@ -431,7 +469,7 @@ int pref_stream_train_create_stream_buffer(Pref_Stream* pref_stream, uns8 proc_i
     lru_stream->buffer_full = FALSE;
     lru_stream->pause = 0;
 
-    lru_stream->length = STREAM_LENGTH;
+    lru_stream->length = pref_stream->distance;
     lru_stream->pref_issued = 0;
     lru_stream->pref_useful = 0;
 
