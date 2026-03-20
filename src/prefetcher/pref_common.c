@@ -132,6 +132,9 @@ static void pref_polbv_lookup_on_miss(uns8 proc_id, Addr addr);
 static void pref_polbv_update_on_repref(uns8 proc_id, Addr addr);
 static int pref_find_hwp_by_name(const char* mech_name);
 static Pref_Level_Dispatch pref_resolve_level_dispatch(const char* mech_name, const char* knob_name, CacheLevel level);
+static Flag pref_mech_is_level_bound_request(const char* mech_name);
+static Flag pref_hwp_supports_level(const HWP* hwp, CacheLevel level);
+static Flag pref_any_level_mech_requests_framework(void);
 static Pref_Mech_Knob_Snapshot pref_capture_mech_knob_snapshot(void);
 static Flag pref_mech_enabled_from_snapshot(const char* mech_name, const Pref_Mech_Knob_Snapshot* snapshot);
 static void pref_force_mech_knob_on(const char* mech_name);
@@ -164,6 +167,35 @@ static int pref_find_hwp_by_name(const char* mech_name) {
   return -1;
 }
 
+static Flag pref_mech_is_level_bound_request(const char* mech_name) {
+  if (!mech_name || mech_name[0] == '\0')
+    return FALSE;
+  if (strcmp(mech_name, "legacy") == 0 || strcmp(mech_name, "none") == 0)
+    return FALSE;
+  return TRUE;
+}
+
+static Flag pref_hwp_supports_level(const HWP* hwp, CacheLevel level) {
+  if (!hwp)
+    return FALSE;
+
+  switch (level) {
+    case DL0:
+      return hwp->dl0_miss_func || hwp->dl0_hit_func || hwp->dl0_pref_hit;
+    case UMLC:
+      return hwp->umlc_miss_func || hwp->umlc_hit_func || hwp->umlc_pref_hit;
+    case UL1:
+      return hwp->ul1_miss_func || hwp->ul1_hit_func || hwp->ul1_pref_hit;
+    default:
+      return FALSE;
+  }
+}
+
+static Flag pref_any_level_mech_requests_framework(void) {
+  return pref_mech_is_level_bound_request(PREF_DL0_MECH) || pref_mech_is_level_bound_request(PREF_UMLC_MECH) ||
+         pref_mech_is_level_bound_request(PREF_UL1_MECH);
+}
+
 static Pref_Level_Dispatch pref_resolve_level_dispatch(const char* mech_name, const char* knob_name, CacheLevel level) {
   Pref_Level_Dispatch dispatch = {PREF_LEVEL_DISPATCH_LEGACY, -1};
 
@@ -180,6 +212,9 @@ static Pref_Level_Dispatch pref_resolve_level_dispatch(const char* mech_name, co
           "Unknown prefetcher '%s' in %s. Use one of: legacy, none, ghb, stream, stride, stridepc, phase, 2dc, "
           "markov.\n",
           mech_name, knob_name);
+  ASSERTM(0, pref_hwp_supports_level(&pref_table[hwp_idx], level),
+          "Invalid prefetch binding: %s='%s' but mechanism '%s' does not implement callbacks for that cache level.\n",
+          knob_name, mech_name, mech_name);
 
   dispatch.mode = PREF_LEVEL_DISPATCH_BOUND;
   dispatch.hwp_index = hwp_idx;
@@ -290,6 +325,11 @@ void pref_init(void) {
   static char* pref_trace_filename = "mem_trace";
   uns8 proc_id;
   Pref_Mech_Knob_Snapshot user_knob_snapshot;
+
+  if (!PREF_FRAMEWORK_ON && pref_any_level_mech_requests_framework()) {
+    PREF_FRAMEWORK_ON = TRUE;
+    DEBUG(0, "Auto-enabled prefetch framework because pref_<level>_mech requested explicit binding\n");
+  }
 
   if (!PREF_FRAMEWORK_ON)
     return;

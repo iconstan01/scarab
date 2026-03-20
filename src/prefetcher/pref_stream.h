@@ -74,6 +74,9 @@ typedef struct Pref_Stream_struct {
   ////////////////////////////////////////////////
 
   uns train_num;  // With pref accuracy, dynamically tune the train length
+  uns train_length;
+  uns start_dis;
+  uns full_n;
   uns distance;
   uns pref_degree_vals[10];
 
@@ -103,7 +106,7 @@ void pref_stream_ul1_hit(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_
 void pref_stream_umlc_miss(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_hist);
 void pref_stream_umlc_hit(uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_hist);
 /*************************************************************/
-void init_stream_core(HWP* hwp, Pref_Stream* pref_stream_core);
+void init_stream_core(HWP* hwp, Pref_Stream* pref_stream_core, CacheLevel type);
 void pref_stream_train(Pref_Stream* pref_stream, uns8 proc_id, Addr lineAddr, Addr loadPC, uns32 global_hist,
                        Flag create, CacheLevel type);
 
