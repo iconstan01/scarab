@@ -31,7 +31,13 @@ static inline Bp_Pred_Info* cbp_get_bp_pred_info(Op* op, Bp_Pred_Level pred_leve
 }
 
 static inline uns cbp_get_bp_id(const Op* op) {
-  return (op && op->parent_FT) ? op->parent_FT->get_bp_id() : MAIN_BP;
+  /* bp_predict_op() stamps recovery_info.bp_id before timestamp/predictor hooks.
+   * Prefer that source to stay compatible with both legacy and newer FT ownership models.
+   */
+  if (op && op->recovery_info.bp_id < NUM_BPS)
+    return op->recovery_info.bp_id;
+
+  return 0;
 }
 
 template <typename CBP_CLASS>
