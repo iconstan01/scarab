@@ -31,7 +31,19 @@ static inline Bp_Pred_Info* cbp_get_bp_pred_info(Op* op, Bp_Pred_Level pred_leve
 }
 
 static inline uns cbp_get_bp_id(const Op* op) {
-  return (op && op->parent_FT) ? op->parent_FT->get_bp_id() : MAIN_BP;
+  if (op && op->parent_FT) {
+    const uns ft_bp_id = op->parent_FT->get_bp_id();
+    if (ft_bp_id < NUM_BPS)
+      return ft_bp_id;
+  }
+
+  /* Warmup/trace paths can execute without a valid parent FT context.
+   * In that case, fall back to the currently-recorded recovery bp_id when valid.
+   */
+  if (op && op->recovery_info.bp_id < NUM_BPS)
+    return op->recovery_info.bp_id;
+
+  return MAIN_BP;
 }
 
 template <typename CBP_CLASS>
