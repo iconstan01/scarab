@@ -583,6 +583,12 @@ void cmp_warmup(Op* op) {
     tlb_warmup(proc_id, va, FALSE);
   }
 
+  /* Warmup ops are not owned by FTQ/DFE; enforce null FT ownership so
+   * BP warmup cannot consume stale parent_FT metadata.
+   */
+  op->parent_FT = NULL;
+  op->parent_FT_off_path = NULL;
+
   // Warmup BP for CF instructions
   if (op->table_info->cf_type != NOT_CF) {
     Bp_Data* bp_data = &(cmp_model.bp_data[proc_id][0]);
