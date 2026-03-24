@@ -425,6 +425,7 @@ void uop_cache_insert_FT(const std::vector<Uop_Cache_Data> inserting_FT, FT_Info
 
       // Partial/mismatched FT found: invalidate any stale remainder, then fall
       // back to fresh insertion for this FT.
+      STAT_EVENT(uc->proc_id, UOP_CACHE_FT_PARTIAL_MISMATCH_ON_PATH + off_path);
       if (first_lookup) {
         Uop_Cache_Key first_key = {first_line->line_start, inserting_FT_info.static_info};
         Entry<Uop_Cache_Key, Uop_Cache_Data> invalidated_entry = uc_cpp->uop_cache->invalidate(first_key);
