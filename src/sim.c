@@ -587,6 +587,7 @@ void uop_sim() {
       if (!retired_exit[proc_id]) {
         do {
           frontend_fetch_op(proc_id, 0, &op);
+          frontend_collect_op_stats(&op);
 
           if (op.table_info->mem_type != NOT_MEM && op.oracle_info.va == 0) {
             FATAL_ERROR(proc_id, "Access to 0x0\n");
