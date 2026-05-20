@@ -48,6 +48,7 @@ extern "C" {
 void memtrace_init(void);
 int memtrace_trace_read(int proc_id, ctype_pin_inst* pt_next_pi);
 void memtrace_setup(uns proc_id);
+uns64 memtrace_get_workload_tag(uns proc_id);
 
 #ifdef __cplusplus
 }

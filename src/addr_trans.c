@@ -43,6 +43,7 @@
 DEFINE_ENUM(Addr_Translation, ADDR_TRANSLATION_LIST);
 
 static uns32 hsieh_hash(const char* data, int len);
+extern uns64 memtrace_get_workload_tag(uns proc_id);
 
 /**************************************************************************************/
 /* addr_translate: translate virtual address to physical address */
@@ -60,6 +61,18 @@ Addr addr_translate(Addr virt_addr) {
    * (i.e., all 0s or all 1s). */
   uns num_page_offset_bits = LOG2(VA_PAGE_SIZE_BYTES);
   Addr page_index = virt_addr >> num_page_offset_bits;
+  uns proc_id = get_proc_id_from_cmp_addr(virt_addr);
+  Addr hash_page_index = page_index;
+
+  if (ADDR_TRANSLATION_MEMTRACE_USE_WORKLOAD_ID) {
+    const uns64 workload_tag = memtrace_get_workload_tag(proc_id);
+    if (workload_tag) {
+      // Use canonicalized page index plus workload-stable identity so a workload
+      // keeps the same DRAM mapping when moved across cores.
+      const Addr canonical_page_index = (convert_to_cmp_addr(0, virt_addr) >> num_page_offset_bits);
+      hash_page_index = canonical_page_index ^ workload_tag;
+    }
+  }
   // we already use the 6 highest bits to store the proc_id.
   // NUM_ADDR_NON_SIGN_EXTEND_BITS tells us how many bits we actually need to
   // keep, and the bits that are left are used to store the original bits after
@@ -69,7 +82,7 @@ Addr addr_translate(Addr virt_addr) {
   Addr hash_source;
 
   if (ADDR_TRANSLATION == ADDR_TRANS_RANDOM || ADDR_TRANSLATION == ADDR_TRANS_FLIP) {
-    hash_source = page_index;
+    hash_source = hash_page_index;
   } else if (ADDR_TRANSLATION == ADDR_TRANS_PRESERVE_BLP || ADDR_TRANSLATION == ADDR_TRANS_PRESERVE_STREAM) {
     /* excluding original_bits from hash source will preserve
        bank-level parallelism among requests with the same upper
@@ -98,7 +111,6 @@ Addr addr_translate(Addr virt_addr) {
      1. the address should retain proc_id in the upper bits
      2. no two page indices should map to the same frame number (otherwise such
         collisions artifically reduce the application's working set) */
-  uns proc_id = get_proc_id_from_cmp_addr(virt_addr);
   Addr page_offset = virt_addr & N_BIT_MASK(num_page_offset_bits);
   Addr masked_virt_addr = check_and_remove_addr_sign_extended_bits(virt_addr, NUM_ADDR_NON_SIGN_EXTEND_BITS, FALSE);
   Addr orig_masked_virt_addr = convert_to_cmp_addr(0, masked_virt_addr);

@@ -122,6 +122,10 @@ DEF_PARAM(va_page_size_bytes, VA_PAGE_SIZE_BYTES, uns, uns, 4096, )
 DEF_PARAM(num_addr_non_sign_extend_bits, NUM_ADDR_NON_SIGN_EXTEND_BITS, uns,
           uns, 48, )
 DEF_PARAM(addr_translation, ADDR_TRANSLATION, uns, Addr_Translation, 0, )
+// If enabled, memtrace runs use a workload-stable tag (derived from trace identity
+// and pid/tid) when hashing page indices for DRAM address translation. This keeps
+// mapping stable when the same workload is moved across cores.
+DEF_PARAM(addr_translation_memtrace_use_workload_id, ADDR_TRANSLATION_MEMTRACE_USE_WORKLOAD_ID, Flag, Flag, FALSE, )
 
 DEF_PARAM(constant_memory_latency, CONSTANT_MEMORY_LATENCY, Flag, Flag, FALSE, )
 // Use with CONSTANT_MEMORY_LATENCY

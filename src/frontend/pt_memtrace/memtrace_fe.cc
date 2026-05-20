@@ -66,11 +66,33 @@ uint64_t ins_id = 0;
 uint64_t ins_id_fetched = 0;
 uint64_t prior_tid[MAX_NUM_PROCS] = {0};
 uint64_t prior_pid[MAX_NUM_PROCS] = {0};
+uns64 memtrace_workload_tag[MAX_NUM_PROCS] = {0};
 
 extern scatter_info_map scatter_info_storage;
 
 Flag roi_dump_began = FALSE;
 Counter roi_dump_ID = 0;
+
+static uns64 fnv1a64(const char* s) {
+  if (!s) {
+    return 0xcbf29ce484222325ULL;
+  }
+  uns64 h = 0xcbf29ce484222325ULL;
+  while (*s) {
+    h ^= (uint8_t)(*s++);
+    h *= 0x100000001b3ULL;
+  }
+  return h;
+}
+
+static uns64 mix64(uns64 x) {
+  x ^= x >> 30;
+  x *= 0xbf58476d1ce4e5b9ULL;
+  x ^= x >> 27;
+  x *= 0x94d049bb133111ebULL;
+  x ^= x >> 31;
+  return x;
+}
 
 /**************************************************************************************/
 /* Private Functions */
@@ -184,6 +206,9 @@ int memtrace_trace_read(int proc_id, ctype_pin_inst* next_onpath_pi) {
       prior_tid[proc_id] = insi->tid;
       ASSERT(proc_id, prior_tid[proc_id]);
       ASSERT(proc_id, prior_pid[proc_id]);
+      // Fold the stable pid/tid identity into the pre-seeded trace-based tag.
+      memtrace_workload_tag[proc_id] =
+          mix64(memtrace_workload_tag[proc_id] ^ (insi->pid * 0x9e3779b97f4a7c15ULL) ^ insi->tid);
     }
     if (insi->valid) {
       ins_id++;
@@ -247,6 +272,7 @@ void memtrace_init(void) {
   init_x87_stack_delta();
   memset(prior_tid, 0, sizeof(prior_tid));
   memset(prior_pid, 0, sizeof(prior_pid));
+  memset(memtrace_workload_tag, 0, sizeof(memtrace_workload_tag));
 
   // next_onpath_pi = (ctype_pin_inst*)malloc(NUM_CORES * sizeof(ctype_pin_inst));
 
@@ -280,6 +306,8 @@ void memtrace_setup(uns proc_id) {
   std::string path(trace_files[proc_id]);
   std::string trace(path);
 
+  // Seed with per-trace identity so workload IDs remain stable across core swaps.
+  memtrace_workload_tag[proc_id] = mix64(fnv1a64(trace_files[proc_id]));
   trace_readers[proc_id] = new TraceReaderMemtrace(trace, 1);
 
   if (FAST_FORWARD) {
@@ -307,4 +335,11 @@ void memtrace_setup(uns proc_id) {
     } while (ffwd(insi->ins));
     std::cout << "Exit fast forward " << inst_count_to_use << std::endl;
   }
+}
+
+extern "C" uns64 memtrace_get_workload_tag(uns proc_id) {
+  if (proc_id >= MAX_NUM_PROCS) {
+    return 0;
+  }
+  return memtrace_workload_tag[proc_id];
 }
