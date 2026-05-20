@@ -93,6 +93,9 @@ static Counter bus_out_seq_num = 1;
 static Counter l1fill_seq_num = 1;
 static Counter mlc_fill_seq_num = 1;
 static Counter* core_fill_seq_num;
+static uns mlc_fill_rr_start = 0;
+static uns mlc_req_rr_start = 0;
+static uns core_fill_rr_start = 0;
 static uns mem_req_demand_entries = 0;
 static uns mem_req_pref_entries = 0;
 static uns mem_req_wb_entries = 0;
@@ -597,6 +600,10 @@ void reset_memory() {
   for (proc_id = 0; proc_id < NUM_CORES; proc_id++) {
     mem->l1_ave_num_ways_per_core[proc_id] = 0;
   }
+
+  mlc_fill_rr_start = 0;
+  mlc_req_rr_start = 0;
+  core_fill_rr_start = 0;
 }
 
 static void mem_clear_reqbuf(Mem_Req* req) {
@@ -1010,9 +1017,12 @@ void update_memory() {
     update_on_chip_memory_stats();
 
     if (PRIVATE_MLC) {
-      for (uns proc_id = 0; proc_id < NUM_CORES; proc_id++) {
+      const uns rr_start = mlc_fill_rr_start;
+      for (uns i = 0; i < NUM_CORES; i++) {
+        const uns proc_id = (rr_start + i) % NUM_CORES;
         mem_process_mlc_fill_reqs(proc_id);
       }
+      mlc_fill_rr_start = (mlc_fill_rr_start + 1) % NUM_CORES;
     } else {
       mem_process_mlc_fill_reqs(0);
     }
@@ -1032,20 +1042,26 @@ void update_memory() {
     mem_process_bus_out_reqs();
     mem_process_l1_reqs();
     if (PRIVATE_MLC) {
-      for (uns proc_id = 0; proc_id < NUM_CORES; proc_id++) {
+      const uns rr_start = mlc_req_rr_start;
+      for (uns i = 0; i < NUM_CORES; i++) {
+        const uns proc_id = (rr_start + i) % NUM_CORES;
         mem_process_mlc_reqs(proc_id);
       }
+      mlc_req_rr_start = (mlc_req_rr_start + 1) % NUM_CORES;
     } else {
       mem_process_mlc_reqs(0);
     }
   }
 
-  for (uns proc_id = 0; proc_id < NUM_CORES; proc_id++) {
+  const uns rr_start = core_fill_rr_start;
+  for (uns i = 0; i < NUM_CORES; i++) {
+    const uns proc_id = (rr_start + i) % NUM_CORES;
     if (freq_is_ready(FREQ_DOMAIN_CORES[proc_id])) {
       cycle_count = freq_cycle_count(FREQ_DOMAIN_CORES[proc_id]);
       mem_process_core_fill_reqs(proc_id);
     }
   }
+  core_fill_rr_start = (core_fill_rr_start + 1) % NUM_CORES;
 }
 
 /**************************************************************************************/
