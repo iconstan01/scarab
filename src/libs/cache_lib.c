@@ -208,6 +208,7 @@ void init_cache(Cache* cache, const char* name, uns cache_size, uns assoc, uns l
 void* cache_access(Cache* cache, Addr addr, Addr* line_addr, Flag update_repl) {
   Addr tag;
   uns set = cache_index(cache, addr, &tag, line_addr);
+  uns debug_proc_id = get_proc_id_from_cmp_addr(addr);
   uns ii;
   void* line_data = NULL;
 
@@ -224,7 +225,7 @@ void* cache_access(Cache* cache, Addr addr, Addr* line_addr, Flag update_repl) {
     if (line->valid && line->tag == tag) {
       /* update replacement state if necessary */
       ASSERT(0, line->data);
-      DEBUG(0, "Found line in cache '%s' at (set %u, way %u, base 0x%s)\n", cache->name, set, ii,
+      DEBUG(debug_proc_id, "Found line in cache '%s' at (set %u, way %u, base 0x%s)\n", cache->name, set, ii,
             hexstr64s(line->base));
 
       if (update_repl) {
@@ -233,7 +234,7 @@ void* cache_access(Cache* cache, Addr addr, Addr* line_addr, Flag update_repl) {
         }
         cache->num_demand_access++;
         update_repl_policy(cache, line, set, ii, FALSE);
-        DEBUG(0, "(%s, %d) [0x%x, 0x%x]: in access\n\n", cache->name, cache->repl_policy, cache->num_sets,
+        DEBUG(debug_proc_id, "(%s, %d) [0x%x, 0x%x]: in access\n\n", cache->name, cache->repl_policy, cache->num_sets,
               cache->assoc);
       }
 
@@ -247,16 +248,16 @@ void* cache_access(Cache* cache, Addr addr, Addr* line_addr, Flag update_repl) {
   /* if it's a miss and we're doing ideal replacement, look in the unsure list
    */
   if (cache->repl_policy == REPL_IDEAL) {
-    DEBUG(0, "Checking unsure list '%s' at (set %u)\n", cache->name, set);
+    DEBUG(debug_proc_id, "Checking unsure list '%s' at (set %u)\n", cache->name, set);
     return access_unsure_lines(cache, set, tag, update_repl);
   }
 
   if (cache->repl_policy == REPL_SHADOW_IDEAL) {
-    DEBUG(0, "Checking shadow cache '%s' at (set %u), base 0x%s\n", cache->name, set, hexstr64s(addr));
+    DEBUG(debug_proc_id, "Checking shadow cache '%s' at (set %u), base 0x%s\n", cache->name, set, hexstr64s(addr));
     return access_shadow_lines(cache, set, tag);
   }
 
-  DEBUG(0, "Didn't find line in set %u in cache '%s' base 0x%s\n", set, cache->name, hexstr64s(addr));
+  DEBUG(debug_proc_id, "Didn't find line in set %u in cache '%s' base 0x%s\n", set, cache->name, hexstr64s(addr));
   return NULL;
 }
 
@@ -289,6 +290,7 @@ void* cache_insert_replpos(Cache* cache, uns8 proc_id, Addr addr, Addr* line_add
   Addr tag;
   uns repl_index;
   uns set = cache_index(cache, addr, &tag, line_addr);
+  uns debug_proc_id = get_proc_id_from_cmp_addr(addr);
   Cache_Entry* new_line;
 
   // Sanity check. Ensure that we do not insert the same line twice
@@ -312,8 +314,8 @@ void* cache_insert_replpos(Cache* cache, uns8 proc_id, Addr addr, Addr* line_add
       *repl_line_addr = new_line->base;
     else
       *repl_line_addr = 0;
-    DEBUG(0, "Replacing 2.2f(set %u, way %u, tag 0x%s, base 0x%s) in cache '%s' with base 0x%s\n", set, repl_index,
-          hexstr64s(new_line->tag), hexstr64s(new_line->base), cache->name, hexstr64s(*line_addr));
+    DEBUG(debug_proc_id, "Replacing 2.2f(set %u, way %u, tag 0x%s, base 0x%s) in cache '%s' with base 0x%s\n", set,
+          repl_index, hexstr64s(new_line->tag), hexstr64s(new_line->base), cache->name, hexstr64s(*line_addr));
   }
 
   new_line->proc_id = proc_id;
@@ -328,7 +330,8 @@ void* cache_insert_replpos(Cache* cache, uns8 proc_id, Addr addr, Addr* line_add
   switch (insert_repl_policy) {
     case INSERT_REPL_DEFAULT:
       update_repl_policy(cache, new_line, set, repl_index, TRUE);
-      DEBUG(0, "(%s, %d) [0x%x, 0x%x]: in insert\n\n", cache->name, cache->repl_policy, cache->num_sets, cache->assoc);
+      DEBUG(debug_proc_id, "(%s, %d) [0x%x, 0x%x]: in insert\n\n", cache->name, cache->repl_policy, cache->num_sets,
+            cache->assoc);
       break;
     case INSERT_REPL_LRU:
       new_line->last_access_time = 123;  // Just choose a small number
