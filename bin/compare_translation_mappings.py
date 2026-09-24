@@ -85,8 +85,9 @@ def write_csv(path, rows, fields):
 def main():
     parser = argparse.ArgumentParser(
         description=__doc__,
-        epilog=("Input rows are memory-request translation observations, not every "
-                "architectural access. Use a unique output CSV for each simulation."),
+        epilog=("Input rows may be memory-request observations or committed load/store "
+                "observations. Compare like-for-like CSVs and use a unique output file "
+                "for each simulation."),
     )
     parser.add_argument("--baseline", required=True, help="Baseline translation-event CSV")
     parser.add_argument("--candidate", required=True, help="Candidate translation-event CSV")

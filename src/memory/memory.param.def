@@ -128,6 +128,8 @@ DEF_PARAM(addr_translation, ADDR_TRANSLATION, uns, Addr_Translation, 0, )
 DEF_PARAM(addr_translation_memtrace_use_workload_id, ADDR_TRANSLATION_MEMTRACE_USE_WORKLOAD_ID, Flag, Flag, FALSE, )
 // Optional CSV of effective request translations (after MEMORY_RANDOM_ADDR).
 DEF_PARAM(addr_translation_trace_file, ADDR_TRANSLATION_TRACE_FILE, char*, string, NULL, )
+// Optional CSV of translations for committed load/store uops, including cache hits.
+DEF_PARAM(addr_translation_committed_trace_file, ADDR_TRANSLATION_COMMITTED_TRACE_FILE, char*, string, NULL, )
 
 DEF_PARAM(constant_memory_latency, CONSTANT_MEMORY_LATENCY, Flag, Flag, FALSE, )
 // Use with CONSTANT_MEMORY_LATENCY

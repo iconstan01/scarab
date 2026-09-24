@@ -45,6 +45,7 @@
 #include "core.param.h"
 #include "memory/memory.param.h"
 
+#include "addr_trans.h"
 #include "bp/bp.h"
 #include "bp/tagescl.h"
 #include "frontend/frontend.h"
@@ -608,6 +609,9 @@ void node_retire() {
     node_precommit_retire(op);
 
     if (op->table_info->mem_type == MEM_LD || op->table_info->mem_type == MEM_ST) {
+      if (ADDR_TRANSLATION_COMMITTED_TRACE_FILE && ADDR_TRANSLATION_COMMITTED_TRACE_FILE[0])
+        addr_translation_log_committed(op->oracle_info.va, op->proc_id,
+                                       op->table_info->mem_type == MEM_LD ? "committed_load" : "committed_store");
       lsq_commit(op);
     }
 

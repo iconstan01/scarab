@@ -32,6 +32,7 @@
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "globals/assert.h"
 #include "globals/global_vars.h"
@@ -134,20 +135,20 @@ Addr addr_translate(Addr virt_addr) {
   return cmp_addr;
 }
 
-void addr_translation_log_event(Addr virt_addr, Addr phys_addr, uns proc_id, uns request_type) {
-  static FILE* trace_file = NULL;
-  static Counter event_id = 0;
+typedef struct {
+  FILE* file;
+  Counter event_id;
+} Translation_Trace;
 
-  if (!ADDR_TRANSLATION_TRACE_FILE || !ADDR_TRANSLATION_TRACE_FILE[0]) {
-    return;
-  }
-
-  if (!trace_file) {
-    trace_file = fopen(ADDR_TRANSLATION_TRACE_FILE, "w");
-    if (!trace_file) {
-      FATAL_ERROR(proc_id, "Cannot open address translation trace file '%s'\n", ADDR_TRANSLATION_TRACE_FILE);
+static void addr_translation_write_event(Translation_Trace* trace, const char* path, Addr virt_addr,
+                                         Addr phys_addr, uns proc_id, const char* event_type,
+                                         const char* mapping_source, Flag flush) {
+  if (!trace->file) {
+    trace->file = fopen(path, "w");
+    if (!trace->file) {
+      FATAL_ERROR(proc_id, "Cannot open address translation trace file '%s'\n", path);
     }
-    fprintf(trace_file,
+    fprintf(trace->file,
             "event_id,phase,roi_id,sim_time,cycle,committed_insts,sim_core,trace_id,pid,tid,request_type,"
             "translation_mode,mapping_source,virtual_address,physical_address,vpn,pfn\n");
   }
@@ -163,18 +164,38 @@ void addr_translation_log_event(Addr virt_addr, Addr phys_addr, uns proc_id, uns
   const uns64 trace_id = memtrace_get_trace_id(proc_id);
   const uns64 pid = memtrace_get_process_id(proc_id);
   const uns64 tid = memtrace_get_thread_id(proc_id);
-  const char* mapping_source = MEMORY_RANDOM_ADDR ? "memory_random_addr" : "addr_translate";
-
-  fprintf(trace_file,
-          "%llu,%s,%lld,%llu,%llu,%llu,%u,%016llx,%llu,%llu,%u,%s,%s,0x%016llx,0x%016llx,0x%llx,0x%llx\n",
-          (unsigned long long)event_id++, phase, roi_id, (unsigned long long)sim_time,
+  fprintf(trace->file,
+          "%llu,%s,%lld,%llu,%llu,%llu,%u,%016llx,%llu,%llu,%s,%s,%s,0x%016llx,0x%016llx,0x%llx,0x%llx\n",
+          (unsigned long long)trace->event_id++, phase, roi_id, (unsigned long long)sim_time,
           (unsigned long long)cycle_count, (unsigned long long)committed_insts, proc_id,
-          (unsigned long long)trace_id, (unsigned long long)pid, (unsigned long long)tid, request_type,
+          (unsigned long long)trace_id, (unsigned long long)pid, (unsigned long long)tid, event_type,
           Addr_Translation_str(ADDR_TRANSLATION), mapping_source, (unsigned long long)virt_addr,
           (unsigned long long)phys_addr, (unsigned long long)vpn, (unsigned long long)pfn);
-  if (fflush(trace_file) != 0) {
-    FATAL_ERROR(proc_id, "Failed writing address translation trace file '%s'\n", ADDR_TRANSLATION_TRACE_FILE);
+  if (ferror(trace->file) || (flush && fflush(trace->file) != 0)) {
+    FATAL_ERROR(proc_id, "Failed writing address translation trace file '%s'\n", path);
   }
+}
+
+void addr_translation_log_event(Addr virt_addr, Addr phys_addr, uns proc_id, uns request_type) {
+  static Translation_Trace trace = {0};
+  char type[16];
+  if (!ADDR_TRANSLATION_TRACE_FILE || !ADDR_TRANSLATION_TRACE_FILE[0])
+    return;
+  snprintf(type, sizeof(type), "%u", request_type);
+  addr_translation_write_event(&trace, ADDR_TRANSLATION_TRACE_FILE, virt_addr, phys_addr, proc_id, type,
+                               MEMORY_RANDOM_ADDR ? "memory_random_addr" : "addr_translate", TRUE);
+}
+
+void addr_translation_log_committed(Addr virt_addr, uns proc_id, const char* mem_type) {
+  static Translation_Trace trace = {0};
+  if (!ADDR_TRANSLATION_COMMITTED_TRACE_FILE || !ADDR_TRANSLATION_COMMITTED_TRACE_FILE[0])
+    return;
+  if (MEMORY_RANDOM_ADDR)
+    FATAL_ERROR(proc_id, "Committed translation tracing requires memory_random_addr=0\n");
+  if (ADDR_TRANSLATION_TRACE_FILE && !strcmp(ADDR_TRANSLATION_TRACE_FILE, ADDR_TRANSLATION_COMMITTED_TRACE_FILE))
+    FATAL_ERROR(proc_id, "Request and committed translation traces need different files\n");
+  addr_translation_write_event(&trace, ADDR_TRANSLATION_COMMITTED_TRACE_FILE, virt_addr, addr_translate(virt_addr),
+                               proc_id, mem_type, "addr_translate", FALSE);
 }
 
 /**************************************************************************************

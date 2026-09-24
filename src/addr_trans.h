@@ -46,5 +46,6 @@ DECLARE_ENUM(Addr_Translation, ADDR_TRANSLATION_LIST, ADDR_TRANS_);
 
 Addr addr_translate(Addr virt_addr);
 void addr_translation_log_event(Addr virt_addr, Addr phys_addr, uns proc_id, uns request_type);
+void addr_translation_log_committed(Addr virt_addr, uns proc_id, const char* mem_type);
 
 #endif  // __ADDR_TRANS_H__
