@@ -208,7 +208,9 @@ void init_cache(Cache* cache, const char* name, uns cache_size, uns assoc, uns l
 void* cache_access(Cache* cache, Addr addr, Addr* line_addr, Flag update_repl) {
   Addr tag;
   uns set = cache_index(cache, addr, &tag, line_addr);
+#ifndef NO_DEBUG
   uns debug_proc_id = get_proc_id_from_cmp_addr(addr);
+#endif
   uns ii;
   void* line_data = NULL;
 
@@ -290,7 +292,9 @@ void* cache_insert_replpos(Cache* cache, uns8 proc_id, Addr addr, Addr* line_add
   Addr tag;
   uns repl_index;
   uns set = cache_index(cache, addr, &tag, line_addr);
+#ifndef NO_DEBUG
   uns debug_proc_id = get_proc_id_from_cmp_addr(addr);
+#endif
   Cache_Entry* new_line;
 
   // Sanity check. Ensure that we do not insert the same line twice
