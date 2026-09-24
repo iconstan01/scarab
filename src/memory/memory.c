@@ -3482,6 +3482,7 @@ static void mem_init_new_req(Mem_Req* new_req, Mem_Req_Type type, Mem_Queue_Type
 
   if (MEMORY_RANDOM_ADDR)
     new_req->phys_addr = convert_to_cmp_addr(proc_id, rand() * VA_PAGE_SIZE_BYTES);
+  addr_translation_log_event(addr, new_req->phys_addr, proc_id, (uns)type);
   new_req->priority = new_priority;
   new_req->size = size;
   ASSERT(new_req->proc_id, new_req->size <= VA_PAGE_SIZE_BYTES);

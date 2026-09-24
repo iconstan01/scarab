@@ -343,3 +343,18 @@ extern "C" uns64 memtrace_get_workload_tag(uns proc_id) {
   }
   return memtrace_workload_tag[proc_id];
 }
+
+extern "C" uns64 memtrace_get_trace_id(uns proc_id) {
+  if (proc_id >= MAX_NUM_PROCS || !trace_files[proc_id]) {
+    return 0;
+  }
+  return fnv1a64(trace_files[proc_id]);
+}
+
+extern "C" uns64 memtrace_get_process_id(uns proc_id) {
+  return proc_id < MAX_NUM_PROCS ? prior_pid[proc_id] : 0;
+}
+
+extern "C" uns64 memtrace_get_thread_id(uns proc_id) {
+  return proc_id < MAX_NUM_PROCS ? prior_tid[proc_id] : 0;
+}

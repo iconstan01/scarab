@@ -30,13 +30,18 @@
 
 #include "addr_trans.h"
 
+#include <stdio.h>
+#include <stdlib.h>
+
 #include "globals/assert.h"
+#include "globals/global_vars.h"
 #include "globals/utils.h"
 
 #include "debug/debug_macros.h"
 
 #include "memory/memory.param.h"
 #include "ramulator.param.h"
+#include "sim.h"
 
 #define DEBUG(proc_id, args...) _DEBUG(proc_id, DEBUG_ADDR_TRANS, ##args)
 
@@ -44,6 +49,9 @@ DEFINE_ENUM(Addr_Translation, ADDR_TRANSLATION_LIST);
 
 static uns32 hsieh_hash(const char* data, int len);
 extern uns64 memtrace_get_workload_tag(uns proc_id);
+extern uns64 memtrace_get_trace_id(uns proc_id);
+extern uns64 memtrace_get_process_id(uns proc_id);
+extern uns64 memtrace_get_thread_id(uns proc_id);
 
 /**************************************************************************************/
 /* addr_translate: translate virtual address to physical address */
@@ -124,6 +132,49 @@ Addr addr_translate(Addr virt_addr) {
   Addr cmp_addr = convert_to_cmp_addr(proc_id, new_phys_addr);
   DEBUG(proc_id, "%llx => %llx\n", virt_addr, cmp_addr);
   return cmp_addr;
+}
+
+void addr_translation_log_event(Addr virt_addr, Addr phys_addr, uns proc_id, uns request_type) {
+  static FILE* trace_file = NULL;
+  static Counter event_id = 0;
+
+  if (!ADDR_TRANSLATION_TRACE_FILE || !ADDR_TRANSLATION_TRACE_FILE[0]) {
+    return;
+  }
+
+  if (!trace_file) {
+    trace_file = fopen(ADDR_TRANSLATION_TRACE_FILE, "w");
+    if (!trace_file) {
+      FATAL_ERROR(proc_id, "Cannot open address translation trace file '%s'\n", ADDR_TRANSLATION_TRACE_FILE);
+    }
+    fprintf(trace_file,
+            "event_id,phase,roi_id,sim_time,cycle,committed_insts,sim_core,trace_id,pid,tid,request_type,"
+            "translation_mode,mapping_source,virtual_address,physical_address,vpn,pfn\n");
+  }
+
+  const char* phase = operating_mode == WARMUP_MODE ? "warmup" : (roi_dump_began ? "roi" : "simulation");
+  const long long roi_id = roi_dump_began ? (long long)roi_dump_ID : -1LL;
+  const Counter committed_insts = inst_count && proc_id < MAX_NUM_PROCS ? inst_count[proc_id] : 0;
+  const uns page_offset_bits = LOG2(VA_PAGE_SIZE_BYTES);
+  const Addr canonical_va = convert_to_cmp_addr(0, virt_addr);
+  const Addr canonical_pa = convert_to_cmp_addr(0, phys_addr);
+  const Addr vpn = canonical_va >> page_offset_bits;
+  const Addr pfn = canonical_pa >> page_offset_bits;
+  const uns64 trace_id = memtrace_get_trace_id(proc_id);
+  const uns64 pid = memtrace_get_process_id(proc_id);
+  const uns64 tid = memtrace_get_thread_id(proc_id);
+  const char* mapping_source = MEMORY_RANDOM_ADDR ? "memory_random_addr" : "addr_translate";
+
+  fprintf(trace_file,
+          "%llu,%s,%lld,%llu,%llu,%llu,%u,%016llx,%llu,%llu,%u,%s,%s,0x%016llx,0x%016llx,0x%llx,0x%llx\n",
+          (unsigned long long)event_id++, phase, roi_id, (unsigned long long)sim_time,
+          (unsigned long long)cycle_count, (unsigned long long)committed_insts, proc_id,
+          (unsigned long long)trace_id, (unsigned long long)pid, (unsigned long long)tid, request_type,
+          Addr_Translation_str(ADDR_TRANSLATION), mapping_source, (unsigned long long)virt_addr,
+          (unsigned long long)phys_addr, (unsigned long long)vpn, (unsigned long long)pfn);
+  if (fflush(trace_file) != 0) {
+    FATAL_ERROR(proc_id, "Failed writing address translation trace file '%s'\n", ADDR_TRANSLATION_TRACE_FILE);
+  }
 }
 
 /**************************************************************************************
