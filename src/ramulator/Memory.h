@@ -42,6 +42,9 @@
 #include <cassert>
 #include <tuple>
 #include <limits.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cstdint>
 
 using namespace std;
 
@@ -138,6 +141,9 @@ public:
     vector<int> addr_bits;
 
     int tx_bits;
+    FILE* addr_decode_trace = nullptr;
+    unsigned long long addr_decode_event_id = 0;
+    bool addr_decode_warned = false;
 
     Memory(const Config& configs, vector<Controller<T>*> ctrls)
         : ctrls(ctrls),
@@ -180,6 +186,15 @@ public:
         }
 
         use_rest_of_addr_as_row_addr = configs.use_rest_of_addr_as_row_addr();
+        if (configs.contains("addr_decode_trace_file")) {
+          addr_decode_trace = std::fopen(configs["addr_decode_trace_file"].c_str(), "w");
+          if (!addr_decode_trace) {
+            std::perror("ramulator address-decode trace");
+            std::abort();
+          }
+          std::fprintf(addr_decode_trace,
+                       "event_id,core_id,physical_address,transaction_address,row_input_bits,row,configured_rows,decoded_tuple\n");
+        }
 
         dram_capacity
             .name("dram_capacity")
@@ -284,6 +299,8 @@ public:
 
     ~Memory()
     {
+        if (addr_decode_trace)
+            std::fclose(addr_decode_trace);
         for (auto ctrl: ctrls)
             delete ctrl;
         delete spec;
@@ -352,6 +369,7 @@ public:
         req.addr_vec.resize(addr_bits.size());
         long addr = req.addr;
         int coreid = req.coreid;
+        int row_input_bits = 0;
 
         // Each transaction size is 2^tx_bits, so first clear the lowest tx_bits bits
         clear_lower_bits(addr, tx_bits);
@@ -372,6 +390,19 @@ public:
                 // fill out addr_vec for everything up until row
                 for (int i = 1; i < int(T::Level::Row); i++)
                     req.addr_vec[i] = slice_lower_bits(addr, addr_bits[i]);
+                if (addr_decode_trace) {
+                    const unsigned long remaining = static_cast<unsigned long>(addr);
+                    row_input_bits = use_rest_of_addr_as_row_addr ?
+                        (remaining ? sizeof(remaining) * CHAR_BIT - __builtin_clzl(remaining) : 0) :
+                        addr_bits[int(T::Level::Row)];
+                    if (use_rest_of_addr_as_row_addr && !addr_decode_warned &&
+                        (row_input_bits == 0 || row_input_bits >= 32)) {
+                        std::fprintf(stderr,
+                                     "Ramulator decode warning: PA=0x%016llx row_input_bits=%d; existing row extractor has undefined behavior at this width\n",
+                                     static_cast<unsigned long long>(static_cast<uint64_t>(req.addr)), row_input_bits);
+                        addr_decode_warned = true;
+                    }
+                }
                 // for the row addr, if use_rest_of_addr_as_row_addr is on, then we use all the remaining
                 // phys addr bits in the row address (to make sure two distinct phys addrs never alias to
                 // the same data in Ramulator)
@@ -387,6 +418,18 @@ public:
         }
 
         if(ctrls[req.addr_vec[0]]->enqueue(req)) {
+            if (addr_decode_trace) {
+                const uint64_t physical = static_cast<uint64_t>(req.addr);
+                const uint64_t transaction = physical & ~((uint64_t(1) << tx_bits) - 1);
+                std::fprintf(addr_decode_trace, "%llu,%d,0x%016llx,0x%016llx,%d,%d,%d,",
+                             ++addr_decode_event_id, coreid,
+                             static_cast<unsigned long long>(physical),
+                             static_cast<unsigned long long>(transaction), row_input_bits,
+                             req.addr_vec[int(T::Level::Row)], spec->org_entry.count[int(T::Level::Row)]);
+                for (size_t i = 0; i < req.addr_vec.size(); i++)
+                    std::fprintf(addr_decode_trace, "%s%d", i ? ":" : "", req.addr_vec[i]);
+                std::fputc('\n', addr_decode_trace);
+            }
             // tally stats here to avoid double counting for requests that aren't enqueued
             ++num_incoming_requests;
             if (req.type == Request::Type::READ) {

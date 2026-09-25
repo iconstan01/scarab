@@ -139,6 +139,8 @@ void init_configs() {
   configs->add("record_cmd_trace", RAMULATOR_REC_CMD_TRACE);
   configs->add("print_cmd_trace", RAMULATOR_PRINT_CMD_TRACE);
   configs->add("use_rest_of_addr_as_row_addr", RAMULATOR_USE_REST_OF_ADDR_AS_ROW_ADDR);
+  if (RAMULATOR_ADDR_DECODE_TRACE_FILE && RAMULATOR_ADDR_DECODE_TRACE_FILE[0])
+    configs->add("addr_decode_trace_file", RAMULATOR_ADDR_DECODE_TRACE_FILE);
 
   configs->add("scheduling_policy", RAMULATOR_SCHEDULING_POLICY);
   configs->add("readq_entries", to_string(RAMULATOR_READQ_ENTRIES));
