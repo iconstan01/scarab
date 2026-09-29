@@ -29,7 +29,7 @@ using namespace ramulator;
 namespace ramulator
 {
 
-static vector<int> get_offending_subarray(DRAM<SALP>* channel, vector<int> & addr_vec){
+static vector<AddressField> get_offending_subarray(DRAM<SALP>* channel, vector<AddressField> & addr_vec){
     int sa_id = 0;
     auto rank = channel->children[addr_vec[int(SALP::Level::Rank)]];
     auto bank = rank->children[addr_vec[int(SALP::Level::Bank)]];
@@ -39,7 +39,7 @@ static vector<int> get_offending_subarray(DRAM<SALP>* channel, vector<int> & add
             sa_id = sa_other->id;
             break;
         }
-    vector<int> offending = addr_vec;
+    vector<AddressField> offending = addr_vec;
     offending[int(SALP::Level::SubArray)] = sa_id;
     offending[int(SALP::Level::Row)] = -1;
     return offending;
@@ -47,7 +47,7 @@ static vector<int> get_offending_subarray(DRAM<SALP>* channel, vector<int> & add
 
 
 template <>
-vector<int> Controller<SALP>::get_addr_vec(SALP::Command cmd, list<Request>::iterator req){
+vector<AddressField> Controller<SALP>::get_addr_vec(SALP::Command cmd, list<Request>::iterator req){
     if (cmd == SALP::Command::PRE_OTHER)
         return get_offending_subarray(channel, req->addr_vec);
     else
@@ -60,7 +60,7 @@ bool Controller<SALP>::is_ready(list<Request>::iterator req){
     SALP::Command cmd = get_first_cmd(req);
     if (cmd == SALP::Command::PRE_OTHER){
 
-        vector<int> addr_vec = get_offending_subarray(channel, req->addr_vec);
+        vector<AddressField> addr_vec = get_offending_subarray(channel, req->addr_vec);
         return channel->check(cmd, addr_vec.data(), clk);
     }
     else return channel->check(cmd, req->addr_vec.data(), clk);
@@ -117,7 +117,7 @@ void Controller<TLDRAM>::tick(){
     if (req == queue->q.end() || !is_ready(req)) {
         // we couldn't find a command to schedule -- let's try to be speculative
         auto cmd = TLDRAM::Command::PRE;
-        vector<int> victim = rowpolicy->get_victim(cmd);
+        vector<AddressField> victim = rowpolicy->get_victim(cmd);
         if (!victim.empty()){
             issue_cmd(cmd, victim, 0);
         }
@@ -186,7 +186,7 @@ void Controller<TLDRAM>::tick(){
 
 template<>
 void Controller<TLDRAM>::cmd_issue_autoprecharge(typename TLDRAM::Command& cmd,
-                                                    const vector<int>& addr_vec) {
+                                                    const vector<AddressField>& addr_vec) {
     //TLDRAM currently does not have autoprecharge commands
     return;
 }

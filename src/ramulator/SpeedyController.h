@@ -169,7 +169,7 @@ public:
         int refresh_interval = channel->spec->speed_entry.nREFI;
         if (clk - refreshed >= refresh_interval) {
             auto req_type = Request::Type::REFRESH;
-            vector<int> addr_vec(int(T::Level::MAX), -1);
+            vector<AddressField> addr_vec(int(T::Level::MAX), -1);
             addr_vec[0] = channel->id;
             for (auto child : channel->children) {
                 addr_vec[1] = child->id;
@@ -232,7 +232,7 @@ private:
         }
         // return channel->decode(cmd, req.addr_vec.data());
     }
-    void update(typename T::Command cmd, bool state_change, vector<int>::iterator& begin, vector<int>::iterator& end, request_queue& q){
+    void update(typename T::Command cmd, bool state_change, vector<AddressField>::iterator& begin, vector<AddressField>::iterator& end, request_queue& q){
         if (q.empty()) return;
 
         for (auto& info : q) {
@@ -290,7 +290,7 @@ private:
         update(first_cmd, state_change, begin, end, otherq);
     }
 
-    void issue_cmd(typename T::Command cmd, int* addr_vec)
+    void issue_cmd(typename T::Command cmd, AddressField* addr_vec)
     {
         // assert(channel->check(cmd, addr_vec, clk));
         channel->update(cmd, addr_vec, clk);
@@ -314,7 +314,7 @@ private:
         if (print_cmd_trace){
             printf("%5s %10ld:", channel->spec->command_name[int(cmd)].c_str(), clk);
             for (int lev = 0; lev < int(T::Level::MAX); lev++)
-                printf(" %5d", addr_vec[lev]);
+                printf(" %5lld", static_cast<long long>(addr_vec[lev]));
             printf("\n");
         }
     }

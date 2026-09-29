@@ -165,7 +165,7 @@ void TLDRAM::init_speed()
 void TLDRAM::init_prereq()
 {
     // RD
-    prereq[int(Level::Rank)][int(Command::RD)] = [] (DRAM<TLDRAM>* node, Command cmd, int id) {
+    prereq[int(Level::Rank)][int(Command::RD)] = [] (DRAM<TLDRAM>* node, Command cmd, AddressField id) {
         switch (int(node->state)) {
             case int(State::PowerUp): return Command::MAX;
             case int(State::ActPowerDown): return Command::PDX;
@@ -176,7 +176,7 @@ void TLDRAM::init_prereq()
     };
     prereq[int(Level::Rank)][int(Command::MIG)] = prereq[int(Level::Rank)][int(Command::RD)];
 
-    prereq[int(Level::Bank)][int(Command::RD)] = [] (DRAM<TLDRAM>* node, Command cmd, int id) {
+    prereq[int(Level::Bank)][int(Command::RD)] = [] (DRAM<TLDRAM>* node, Command cmd, AddressField id) {
         switch (int(node->state)) {
             case int(State::Closed):
                 if (id % node->spec->segment_ratio)
@@ -193,7 +193,7 @@ void TLDRAM::init_prereq()
             default: assert(false);
         }
     };
-    prereq[int(Level::Bank)][int(Command::MIG)] = [] (DRAM<TLDRAM>* node, Command cmd, int id) {
+    prereq[int(Level::Bank)][int(Command::MIG)] = [] (DRAM<TLDRAM>* node, Command cmd, AddressField id) {
         switch (int(node->state)) {
             case int(State::Closed):
                 return Command::ACTM;
@@ -210,7 +210,7 @@ void TLDRAM::init_prereq()
     prereq[int(Level::Bank)][int(Command::WR)] = prereq[int(Level::Bank)][int(Command::RD)];
 
     // REF
-    prereq[int(Level::Rank)][int(Command::REF)] = [] (DRAM<TLDRAM>* node, Command cmd, int id) {
+    prereq[int(Level::Rank)][int(Command::REF)] = [] (DRAM<TLDRAM>* node, Command cmd, AddressField id) {
         for (auto bank : node->children) {
             if (bank->state == State::Closed)
                 continue;
@@ -223,7 +223,7 @@ void TLDRAM::init_prereq()
     };
 
     // PD
-    prereq[int(Level::Rank)][int(Command::PDE)] = [] (DRAM<TLDRAM>* node, Command cmd, int id) {
+    prereq[int(Level::Rank)][int(Command::PDE)] = [] (DRAM<TLDRAM>* node, Command cmd, AddressField id) {
         switch (int(node->state)) {
             case int(State::PowerUp): return Command::PDE;
             case int(State::ActPowerDown): return Command::PDE;
@@ -234,7 +234,7 @@ void TLDRAM::init_prereq()
     };
 
     // SR
-    prereq[int(Level::Rank)][int(Command::SRE)] = [] (DRAM<TLDRAM>* node, Command cmd, int id) {
+    prereq[int(Level::Rank)][int(Command::SRE)] = [] (DRAM<TLDRAM>* node, Command cmd, AddressField id) {
         switch (int(node->state)) {
             case int(State::PowerUp): return Command::SRE;
             case int(State::ActPowerDown): return Command::PDX;
@@ -249,7 +249,7 @@ void TLDRAM::init_prereq()
 void TLDRAM::init_rowhit()
 {
     // RD
-    rowhit[int(Level::Bank)][int(Command::RD)] = [] (DRAM<TLDRAM>* node, Command cmd, int id) {
+    rowhit[int(Level::Bank)][int(Command::RD)] = [] (DRAM<TLDRAM>* node, Command cmd, AddressField id) {
         switch (int(node->state)) {
             case int(State::Closed): return false;
             case int(State::Opened):
@@ -266,7 +266,7 @@ void TLDRAM::init_rowhit()
 void TLDRAM::init_rowopen()
 {
     // RD
-    rowopen[int(Level::Bank)][int(Command::RD)] = [] (DRAM<TLDRAM>* node, Command cmd, int id) {
+    rowopen[int(Level::Bank)][int(Command::RD)] = [] (DRAM<TLDRAM>* node, Command cmd, AddressField id) {
         switch (int(node->state)) {
             case int(State::Closed): return false;
             case int(State::Opened): return true;
@@ -279,54 +279,54 @@ void TLDRAM::init_rowopen()
 
 void TLDRAM::init_lambda()
 {
-    lambda[int(Level::Bank)][int(Command::ACT)] = [] (DRAM<TLDRAM>* node, int id) {
+    lambda[int(Level::Bank)][int(Command::ACT)] = [] (DRAM<TLDRAM>* node, AddressField id) {
         node->state = State::Opened;
         node->row_state[id] = State::Opened;
     };
-    lambda[int(Level::Bank)][int(Command::ACTF)] = [] (DRAM<TLDRAM>* node, int id) {
+    lambda[int(Level::Bank)][int(Command::ACTF)] = [] (DRAM<TLDRAM>* node, AddressField id) {
         node->state = State::Opened;
         node->row_state[id] = State::Opened;
     };
-    lambda[int(Level::Bank)][int(Command::ACTM)] = [] (DRAM<TLDRAM>* node, int id) {
+    lambda[int(Level::Bank)][int(Command::ACTM)] = [] (DRAM<TLDRAM>* node, AddressField id) {
         node->state = State::Opened;
         node->row_state[id] = State::Opened;
     };
-    lambda[int(Level::Bank)][int(Command::PRE)] = [] (DRAM<TLDRAM>* node, int id) {
+    lambda[int(Level::Bank)][int(Command::PRE)] = [] (DRAM<TLDRAM>* node, AddressField id) {
         node->state = State::Closed;
         node->row_state.clear();
     };
-    lambda[int(Level::Bank)][int(Command::PREF)] = [] (DRAM<TLDRAM>* node, int id) {
+    lambda[int(Level::Bank)][int(Command::PREF)] = [] (DRAM<TLDRAM>* node, AddressField id) {
         node->state = State::Closed;
         node->row_state.clear();
     };
-    lambda[int(Level::Bank)][int(Command::PREM)] = [] (DRAM<TLDRAM>* node, int id) {
+    lambda[int(Level::Bank)][int(Command::PREM)] = [] (DRAM<TLDRAM>* node, AddressField id) {
         node->state = State::Closed;
         node->row_state.clear();
     };
-    lambda[int(Level::Rank)][int(Command::PREA)] = [] (DRAM<TLDRAM>* node, int id) {
+    lambda[int(Level::Rank)][int(Command::PREA)] = [] (DRAM<TLDRAM>* node, AddressField id) {
         for (auto bank : node->children) {
             bank->state = State::Closed;
             bank->row_state.clear();
         }
     };
-    lambda[int(Level::Rank)][int(Command::PREAF)] = [] (DRAM<TLDRAM>* node, int id) {
+    lambda[int(Level::Rank)][int(Command::PREAF)] = [] (DRAM<TLDRAM>* node, AddressField id) {
         for (auto bank : node->children) {
             bank->state = State::Closed;
             bank->row_state.clear();
         }
     };
-    lambda[int(Level::Rank)][int(Command::PREAM)] = [] (DRAM<TLDRAM>* node, int id) {
+    lambda[int(Level::Rank)][int(Command::PREAM)] = [] (DRAM<TLDRAM>* node, AddressField id) {
         for (auto bank : node->children) {
             bank->state = State::Closed;
             bank->row_state.clear();
         }
     };
-    lambda[int(Level::Rank)][int(Command::REF)] = [] (DRAM<TLDRAM>* node, int id) {};
-    lambda[int(Level::Rank)][int(Command::REF)] = [] (DRAM<TLDRAM>* node, int id) {};
-    lambda[int(Level::Bank)][int(Command::RD)] = [] (DRAM<TLDRAM>* node, int id) {};
-    lambda[int(Level::Bank)][int(Command::WR)] = [] (DRAM<TLDRAM>* node, int id) {};
-    lambda[int(Level::Bank)][int(Command::MIG)] = [] (DRAM<TLDRAM>* node, int id) {};
-    lambda[int(Level::Rank)][int(Command::PDE)] = [] (DRAM<TLDRAM>* node, int id) {
+    lambda[int(Level::Rank)][int(Command::REF)] = [] (DRAM<TLDRAM>* node, AddressField id) {};
+    lambda[int(Level::Rank)][int(Command::REF)] = [] (DRAM<TLDRAM>* node, AddressField id) {};
+    lambda[int(Level::Bank)][int(Command::RD)] = [] (DRAM<TLDRAM>* node, AddressField id) {};
+    lambda[int(Level::Bank)][int(Command::WR)] = [] (DRAM<TLDRAM>* node, AddressField id) {};
+    lambda[int(Level::Bank)][int(Command::MIG)] = [] (DRAM<TLDRAM>* node, AddressField id) {};
+    lambda[int(Level::Rank)][int(Command::PDE)] = [] (DRAM<TLDRAM>* node, AddressField id) {
         for (auto bank : node->children) {
             if (bank->state == State::Closed)
                 continue;
@@ -335,13 +335,13 @@ void TLDRAM::init_lambda()
         }
         node->state = State::PrePowerDown;
     };
-    lambda[int(Level::Rank)][int(Command::PDX)] = [] (DRAM<TLDRAM>* node, int id) {
+    lambda[int(Level::Rank)][int(Command::PDX)] = [] (DRAM<TLDRAM>* node, AddressField id) {
         node->state = State::PowerUp;
     };
-    lambda[int(Level::Rank)][int(Command::SRE)] = [] (DRAM<TLDRAM>* node, int id) {
+    lambda[int(Level::Rank)][int(Command::SRE)] = [] (DRAM<TLDRAM>* node, AddressField id) {
         node->state = State::SelfRefresh;
     };
-    lambda[int(Level::Rank)][int(Command::SRX)] = [] (DRAM<TLDRAM>* node, int id) {
+    lambda[int(Level::Rank)][int(Command::SRX)] = [] (DRAM<TLDRAM>* node, AddressField id) {
         node->state = State::PowerUp;
     };
 }

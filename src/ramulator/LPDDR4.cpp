@@ -177,7 +177,7 @@ void LPDDR4::init_speed()
 void LPDDR4::init_prereq()
 {
     // RD
-    prereq[int(Level::Rank)][int(Command::RD)] = [] (DRAM<LPDDR4>* node, Command cmd, int id) {
+    prereq[int(Level::Rank)][int(Command::RD)] = [] (DRAM<LPDDR4>* node, Command cmd, AddressField id) {
         switch (int(node->state)) {
             case int(State::PowerUp): return Command::MAX;
             case int(State::ActPowerDown): return Command::PDX;
@@ -185,7 +185,7 @@ void LPDDR4::init_prereq()
             case int(State::SelfRefresh): return Command::SREFX;
             default: assert(false);
         }};
-    prereq[int(Level::Bank)][int(Command::RD)] = [] (DRAM<LPDDR4>* node, Command cmd, int id) {
+    prereq[int(Level::Bank)][int(Command::RD)] = [] (DRAM<LPDDR4>* node, Command cmd, AddressField id) {
         switch (int(node->state)) {
             case int(State::Closed): return Command::ACT;
             case int(State::Opened):
@@ -200,7 +200,7 @@ void LPDDR4::init_prereq()
     prereq[int(Level::Bank)][int(Command::WR)] = prereq[int(Level::Bank)][int(Command::RD)];
 
     // REF
-    prereq[int(Level::Rank)][int(Command::REF)] = [] (DRAM<LPDDR4>* node, Command cmd, int id) {
+    prereq[int(Level::Rank)][int(Command::REF)] = [] (DRAM<LPDDR4>* node, Command cmd, AddressField id) {
         for (auto bank : node->children) {
             if (bank->state == State::Closed)
                 continue;
@@ -209,7 +209,7 @@ void LPDDR4::init_prereq()
         return Command::REF;};
 
     // PD
-    prereq[int(Level::Rank)][int(Command::PDE)] = [] (DRAM<LPDDR4>* node, Command cmd, int id) {
+    prereq[int(Level::Rank)][int(Command::PDE)] = [] (DRAM<LPDDR4>* node, Command cmd, AddressField id) {
         switch (int(node->state)) {
             case int(State::PowerUp): return Command::PDE;
             case int(State::ActPowerDown): return Command::PDE;
@@ -219,7 +219,7 @@ void LPDDR4::init_prereq()
         }};
 
     // SR
-    prereq[int(Level::Rank)][int(Command::SREF)] = [] (DRAM<LPDDR4>* node, Command cmd, int id) {
+    prereq[int(Level::Rank)][int(Command::SREF)] = [] (DRAM<LPDDR4>* node, Command cmd, AddressField id) {
         switch (int(node->state)) {
             case int(State::PowerUp): return Command::SREF;
             case int(State::ActPowerDown): return Command::PDX;
@@ -233,7 +233,7 @@ void LPDDR4::init_prereq()
 void LPDDR4::init_rowhit()
 {
     // RD
-    rowhit[int(Level::Bank)][int(Command::RD)] = [] (DRAM<LPDDR4>* node, Command cmd, int id) {
+    rowhit[int(Level::Bank)][int(Command::RD)] = [] (DRAM<LPDDR4>* node, Command cmd, AddressField id) {
         switch (int(node->state)) {
             case int(State::Closed): return false;
             case int(State::Opened):
@@ -250,7 +250,7 @@ void LPDDR4::init_rowhit()
 void LPDDR4::init_rowopen()
 {
     // RD
-    rowopen[int(Level::Bank)][int(Command::RD)] = [] (DRAM<LPDDR4>* node, Command cmd, int id) {
+    rowopen[int(Level::Bank)][int(Command::RD)] = [] (DRAM<LPDDR4>* node, Command cmd, AddressField id) {
         switch (int(node->state)) {
             case int(State::Closed): return false;
             case int(State::Opened): return true;
@@ -263,26 +263,26 @@ void LPDDR4::init_rowopen()
 
 void LPDDR4::init_lambda()
 {
-    lambda[int(Level::Bank)][int(Command::ACT)] = [] (DRAM<LPDDR4>* node, int id) {
+    lambda[int(Level::Bank)][int(Command::ACT)] = [] (DRAM<LPDDR4>* node, AddressField id) {
         node->state = State::Opened;
         node->row_state[id] = State::Opened;};
-    lambda[int(Level::Bank)][int(Command::PRE)] = [] (DRAM<LPDDR4>* node, int id) {
+    lambda[int(Level::Bank)][int(Command::PRE)] = [] (DRAM<LPDDR4>* node, AddressField id) {
         node->state = State::Closed;
         node->row_state.clear();};
-    lambda[int(Level::Rank)][int(Command::PREA)] = [] (DRAM<LPDDR4>* node, int id) {
+    lambda[int(Level::Rank)][int(Command::PREA)] = [] (DRAM<LPDDR4>* node, AddressField id) {
         for (auto bank : node->children) {
             bank->state = State::Closed;
             bank->row_state.clear();}};
-    lambda[int(Level::Rank)][int(Command::REF)] = [] (DRAM<LPDDR4>* node, int id) {};
-    lambda[int(Level::Bank)][int(Command::RD)] = [] (DRAM<LPDDR4>* node, int id) {};
-    lambda[int(Level::Bank)][int(Command::WR)] = [] (DRAM<LPDDR4>* node, int id) {};
-    lambda[int(Level::Bank)][int(Command::RDA)] = [] (DRAM<LPDDR4>* node, int id) {
+    lambda[int(Level::Rank)][int(Command::REF)] = [] (DRAM<LPDDR4>* node, AddressField id) {};
+    lambda[int(Level::Bank)][int(Command::RD)] = [] (DRAM<LPDDR4>* node, AddressField id) {};
+    lambda[int(Level::Bank)][int(Command::WR)] = [] (DRAM<LPDDR4>* node, AddressField id) {};
+    lambda[int(Level::Bank)][int(Command::RDA)] = [] (DRAM<LPDDR4>* node, AddressField id) {
         node->state = State::Closed;
         node->row_state.clear();};
-    lambda[int(Level::Bank)][int(Command::WRA)] = [] (DRAM<LPDDR4>* node, int id) {
+    lambda[int(Level::Bank)][int(Command::WRA)] = [] (DRAM<LPDDR4>* node, AddressField id) {
         node->state = State::Closed;
         node->row_state.clear();};
-    lambda[int(Level::Rank)][int(Command::PDE)] = [] (DRAM<LPDDR4>* node, int id) {
+    lambda[int(Level::Rank)][int(Command::PDE)] = [] (DRAM<LPDDR4>* node, AddressField id) {
         for (auto bank : node->children) {
             if (bank->state == State::Closed)
                 continue;
@@ -290,11 +290,11 @@ void LPDDR4::init_lambda()
             return;
         }
         node->state = State::PrePowerDown;};
-    lambda[int(Level::Rank)][int(Command::PDX)] = [] (DRAM<LPDDR4>* node, int id) {
+    lambda[int(Level::Rank)][int(Command::PDX)] = [] (DRAM<LPDDR4>* node, AddressField id) {
         node->state = State::PowerUp;};
-    lambda[int(Level::Rank)][int(Command::SREF)] = [] (DRAM<LPDDR4>* node, int id) {
+    lambda[int(Level::Rank)][int(Command::SREF)] = [] (DRAM<LPDDR4>* node, AddressField id) {
         node->state = State::SelfRefresh;};
-    lambda[int(Level::Rank)][int(Command::SREFX)] = [] (DRAM<LPDDR4>* node, int id) {
+    lambda[int(Level::Rank)][int(Command::SREFX)] = [] (DRAM<LPDDR4>* node, AddressField id) {
         node->state = State::PowerUp;};
 }
 

@@ -129,7 +129,7 @@ void SALP::init_speed()
 
 void SALP::init_prereq()
 {
-    prereq[int(Level::Rank)][int(Command::RD)] = [] (DRAM<SALP>* node, Command cmd, int id) {
+    prereq[int(Level::Rank)][int(Command::RD)] = [] (DRAM<SALP>* node, Command cmd, AddressField id) {
         switch (int(node->state)) {
             case int(State::PowerUp): return Command::MAX;
             case int(State::ActPowerDown): return Command::PDX;
@@ -141,14 +141,14 @@ void SALP::init_prereq()
 
     switch(int(type)){
         case int(Type::SALP_1):
-            prereq[int(Level::Bank)][int(Command::RD)] = [] (DRAM<SALP>* node, Command cmd, int id) {
+            prereq[int(Level::Bank)][int(Command::RD)] = [] (DRAM<SALP>* node, Command cmd, AddressField id) {
                 switch (int(node->state)){
                     case int(State::Closed): return Command::ACT;
                     case int(State::Opened):
                         return Command::MAX;
                     default: assert(false);}};
             prereq[int(Level::Bank)][int(Command::WR)] = prereq[int(Level::Bank)][int(Command::RD)];
-            prereq[int(Level::SubArray)][int(Command::RD)] = [] (DRAM<SALP>* node, Command cmd, int id) {
+            prereq[int(Level::SubArray)][int(Command::RD)] = [] (DRAM<SALP>* node, Command cmd, AddressField id) {
               if (node->row_state.find(id) != node->row_state.end()) {
                 return cmd;
               } else if (node->row_state.size()) {
@@ -158,7 +158,7 @@ void SALP::init_prereq()
               }
             };
             prereq[int(Level::SubArray)][int(Command::WR)] = prereq[int(Level::SubArray)][int(Command::RD)];
-            prereq[int(Level::Rank)][int(Command::REF)] = [] (DRAM<SALP>* node, Command cmd, int id) {
+            prereq[int(Level::Rank)][int(Command::REF)] = [] (DRAM<SALP>* node, Command cmd, AddressField id) {
                 for (auto bank : node->children) {
                     if (bank->state == State::Closed)
                         continue;
@@ -167,7 +167,7 @@ void SALP::init_prereq()
                 return Command::REF;};
             break;
         case int(Type::SALP_2):
-            prereq[int(Level::SubArray)][int(Command::RD)] = [] (DRAM<SALP>* node, Command cmd, int id) {
+            prereq[int(Level::SubArray)][int(Command::RD)] = [] (DRAM<SALP>* node, Command cmd, AddressField id) {
                 switch (int(node->state)){
                     case int(State::Closed): return Command::ACT;
                     case int(State::Opened):
@@ -185,7 +185,7 @@ void SALP::init_prereq()
                         }
                     default: assert(false);}};
             prereq[int(Level::SubArray)][int(Command::WR)] = prereq[int(Level::SubArray)][int(Command::RD)];
-            prereq[int(Level::Rank)][int(Command::REF)] = [] (DRAM<SALP>* node, Command cmd, int id) {
+            prereq[int(Level::Rank)][int(Command::REF)] = [] (DRAM<SALP>* node, Command cmd, AddressField id) {
                 for (auto bank : node->children)
                     for (auto sa : bank->children) {
                         if (sa->state == State::Closed)
@@ -195,7 +195,7 @@ void SALP::init_prereq()
                 return Command::REF;};
             break;
         case int(Type::MASA):
-            prereq[int(Level::SubArray)][int(Command::RD)] = [] (DRAM<SALP>* node, Command cmd, int id) {
+            prereq[int(Level::SubArray)][int(Command::RD)] = [] (DRAM<SALP>* node, Command cmd, AddressField id) {
                 switch (int(node->state)){
                     case int(State::Closed): return Command::ACT;
                     case int(State::Opened):
@@ -207,7 +207,7 @@ void SALP::init_prereq()
                     default: assert(false);
                 }};
             prereq[int(Level::SubArray)][int(Command::WR)] = prereq[int(Level::SubArray)][int(Command::RD)];
-            prereq[int(Level::Rank)][int(Command::REF)] = [] (DRAM<SALP>* node, Command cmd, int id) {
+            prereq[int(Level::Rank)][int(Command::REF)] = [] (DRAM<SALP>* node, Command cmd, AddressField id) {
                 for (auto bank : node->children)
                     for (auto sa : bank->children){
                         if (sa->state == State::Closed)
@@ -219,7 +219,7 @@ void SALP::init_prereq()
         default: assert(false);
     }
     // PD
-    prereq[int(Level::Rank)][int(Command::PDE)] = [] (DRAM<SALP>* node, Command cmd, int id) {
+    prereq[int(Level::Rank)][int(Command::PDE)] = [] (DRAM<SALP>* node, Command cmd, AddressField id) {
         switch (int(node->state)) {
             case int(State::PowerUp): return Command::PDE;
             case int(State::ActPowerDown): return Command::PDE;
@@ -229,7 +229,7 @@ void SALP::init_prereq()
         }};
 
     // SR
-    prereq[int(Level::Rank)][int(Command::SRE)] = [] (DRAM<SALP>* node, Command cmd, int id) {
+    prereq[int(Level::Rank)][int(Command::SRE)] = [] (DRAM<SALP>* node, Command cmd, AddressField id) {
         switch (int(node->state)) {
             case int(State::PowerUp): return Command::SRE;
             case int(State::ActPowerDown): return Command::PDX;
@@ -245,7 +245,7 @@ void SALP::init_rowhit()
     switch(int(type)) {
         case int(Type::SALP_1):
             // RD
-            rowhit[int(Level::SubArray)][int(Command::RD)] = [] (DRAM<SALP>* node, Command cmd, int id) {
+            rowhit[int(Level::SubArray)][int(Command::RD)] = [] (DRAM<SALP>* node, Command cmd, AddressField id) {
               switch (int(node->state)) {
                 case int(State::Closed): return false;
                 case int(State::Opened):
@@ -259,7 +259,7 @@ void SALP::init_rowhit()
             break;
         case int(Type::SALP_2):
             // RD
-            rowhit[int(Level::SubArray)][int(Command::RD)] = [] (DRAM<SALP>* node, Command cmd, int id) {
+            rowhit[int(Level::SubArray)][int(Command::RD)] = [] (DRAM<SALP>* node, Command cmd, AddressField id) {
                 switch (int(node->state)){
                     case int(State::Closed): return false;
                     case int(State::Opened):
@@ -272,7 +272,7 @@ void SALP::init_rowhit()
             break;
         case int(Type::MASA):
             // RD
-            rowhit[int(Level::SubArray)][int(Command::RD)] = [] (DRAM<SALP>* node, Command cmd, int id) {
+            rowhit[int(Level::SubArray)][int(Command::RD)] = [] (DRAM<SALP>* node, Command cmd, AddressField id) {
                 switch (int(node->state)){
                     case int(State::Closed): return false;
                     case int(State::Opened):
@@ -296,7 +296,7 @@ void SALP::init_rowopen()
     switch(int(type)) {
         case int(Type::SALP_1):
             // RD
-            rowopen[int(Level::Bank)][int(Command::RD)] = [] (DRAM<SALP>* node, Command cmd, int id) {
+            rowopen[int(Level::Bank)][int(Command::RD)] = [] (DRAM<SALP>* node, Command cmd, AddressField id) {
                 switch (int(node->state)){
                     case int(State::Closed): return false;
                     case int(State::Opened): return true;
@@ -307,7 +307,7 @@ void SALP::init_rowopen()
             break;
         case int(Type::SALP_2):
             // RD
-            rowopen[int(Level::SubArray)][int(Command::RD)] = [] (DRAM<SALP>* node, Command cmd, int id) {
+            rowopen[int(Level::SubArray)][int(Command::RD)] = [] (DRAM<SALP>* node, Command cmd, AddressField id) {
                 switch (int(node->state)){
                     case int(State::Closed): return false;
                     case int(State::Opened): return true;
@@ -318,7 +318,7 @@ void SALP::init_rowopen()
             break;
         case int(Type::MASA):
             // RD
-            rowopen[int(Level::SubArray)][int(Command::RD)] = [] (DRAM<SALP>* node, Command cmd, int id) {
+            rowopen[int(Level::SubArray)][int(Command::RD)] = [] (DRAM<SALP>* node, Command cmd, AddressField id) {
                 switch (int(node->state)){
                     case int(State::Closed): return false;
                     case int(State::Opened): return true;
@@ -336,14 +336,14 @@ void SALP::init_lambda()
 {
     switch(int(type)){
         case int(Type::SALP_1):
-            lambda[int(Level::Bank)][int(Command::ACT)] = [] (DRAM<SALP>* node, int id) {
+            lambda[int(Level::Bank)][int(Command::ACT)] = [] (DRAM<SALP>* node, AddressField id) {
                 node->state = State::Opened;
             };
-            lambda[int(Level::SubArray)][int(Command::ACT)] = [] (DRAM<SALP>* node, int id) {
+            lambda[int(Level::SubArray)][int(Command::ACT)] = [] (DRAM<SALP>* node, AddressField id) {
               node->state = State::Opened;
               node->row_state[id] = State::Opened;
             };
-            lambda[int(Level::Bank)][int(Command::PRE)] = [] (DRAM<SALP>* node, int id) {
+            lambda[int(Level::Bank)][int(Command::PRE)] = [] (DRAM<SALP>* node, AddressField id) {
                 node->state = State::Closed;
                 // For SALP_1, we stick to original design that allows
                 // only one row in a bank open, so here close subarray id
@@ -352,18 +352,18 @@ void SALP::init_lambda()
                 node->children[id]->row_state.clear();
                 };
             lambda[int(Level::Bank)][int(Command::PRE_OTHER)] = lambda[int(Level::Bank)][int(Command::PRE)];
-            lambda[int(Level::Rank)][int(Command::PRER)] = [] (DRAM<SALP>* node, int id) {
+            lambda[int(Level::Rank)][int(Command::PRER)] = [] (DRAM<SALP>* node, AddressField id) {
                 for (auto bank : node->children) {
                     bank->state = State::Closed;
                     for (auto sa : bank->children){
                         sa->state = State::Closed;
                         sa->row_state.clear();}}};
-            lambda[int(Level::Bank)][int(Command::RDA)] = [] (DRAM<SALP>* node, int id) {
+            lambda[int(Level::Bank)][int(Command::RDA)] = [] (DRAM<SALP>* node, AddressField id) {
                 node->state = State::Closed;
                 node->children[id]->state = State::Closed;
                 node->children[id]->row_state.clear();};
             lambda[int(Level::Bank)][int(Command::WRA)] = lambda[int(Level::Bank)][int(Command::RDA)];
-            lambda[int(Level::Rank)][int(Command::PDE)] = [] (DRAM<SALP>* node, int id) {
+            lambda[int(Level::Rank)][int(Command::PDE)] = [] (DRAM<SALP>* node, AddressField id) {
                 for (auto bank : node->children) {
                     if (bank->state == State::Closed)
                         continue;
@@ -373,25 +373,25 @@ void SALP::init_lambda()
                 node->state = State::PrePowerDown;};
             break;
         case int(Type::SALP_2):
-            lambda[int(Level::SubArray)][int(Command::ACT)] = [] (DRAM<SALP>* node, int id) {
+            lambda[int(Level::SubArray)][int(Command::ACT)] = [] (DRAM<SALP>* node, AddressField id) {
                 node->state = State::Opened;
                 node->row_state[id] = State::Opened;};
-            lambda[int(Level::SubArray)][int(Command::PRE)] = [] (DRAM<SALP>* node, int id) {
+            lambda[int(Level::SubArray)][int(Command::PRE)] = [] (DRAM<SALP>* node, AddressField id) {
                 node->state = State::Closed;
                 node->row_state.clear();};
             lambda[int(Level::SubArray)][int(Command::PRE_OTHER)] = lambda[int(Level::SubArray)][int(Command::PRE)];
-            lambda[int(Level::Rank)][int(Command::PRER)] = [] (DRAM<SALP>* node, int id) {
+            lambda[int(Level::Rank)][int(Command::PRER)] = [] (DRAM<SALP>* node, AddressField id) {
                 for (auto bank : node->children)
                     for (auto sa : bank->children) {
                         sa->state = State::Closed;
                         sa->row_state.clear();}};
-            lambda[int(Level::SubArray)][int(Command::RDA)] = [] (DRAM<SALP>* node, int id) {
+            lambda[int(Level::SubArray)][int(Command::RDA)] = [] (DRAM<SALP>* node, AddressField id) {
                 node->state = State::Closed;
                 node->row_state.clear();};
-            lambda[int(Level::SubArray)][int(Command::WRA)] = [] (DRAM<SALP>* node, int id) {
+            lambda[int(Level::SubArray)][int(Command::WRA)] = [] (DRAM<SALP>* node, AddressField id) {
                 node->state = State::Closed;
                 node->row_state.clear();};
-            lambda[int(Level::Rank)][int(Command::PDE)] = [] (DRAM<SALP>* node, int id) {
+            lambda[int(Level::Rank)][int(Command::PDE)] = [] (DRAM<SALP>* node, AddressField id) {
                 for (auto bank : node->children)
                     for (auto sa : bank->children) {
                         if (sa->state == State::Closed)
@@ -402,35 +402,35 @@ void SALP::init_lambda()
                 node->state = State::PrePowerDown;};
             break;
         case int(Type::MASA):
-            lambda[int(Level::SubArray)][int(Command::ACT)] = [] (DRAM<SALP>* node, int id) {
+            lambda[int(Level::SubArray)][int(Command::ACT)] = [] (DRAM<SALP>* node, AddressField id) {
                 node->state = State::Selected;
                 node->row_state[id] = State::Opened;
                 for (auto sa : node->parent->children)
                     if (sa != node && sa->state == State::Selected) {
                         sa->state = State::Opened;
                         break;}};
-            lambda[int(Level::SubArray)][int(Command::SASEL)] = [] (DRAM<SALP>* node, int id) {
+            lambda[int(Level::SubArray)][int(Command::SASEL)] = [] (DRAM<SALP>* node, AddressField id) {
                 node->state = State::Selected;
                 for (auto sa : node->parent->children)
                     if (sa != node && sa->state == State::Selected) {
                         sa->state = State::Opened;
                         break;}};
-            lambda[int(Level::SubArray)][int(Command::PRE)] = [] (DRAM<SALP>* node, int id) {
+            lambda[int(Level::SubArray)][int(Command::PRE)] = [] (DRAM<SALP>* node, AddressField id) {
                 node->state = State::Closed;
                 node->row_state.clear();};
 
-            lambda[int(Level::Rank)][int(Command::PRER)] = [] (DRAM<SALP>* node, int id) {
+            lambda[int(Level::Rank)][int(Command::PRER)] = [] (DRAM<SALP>* node, AddressField id) {
                 for (auto bank : node->children)
                     for (auto sa : bank->children) {
                         sa->state = State::Closed;
                         sa->row_state.clear();}};
-            lambda[int(Level::SubArray)][int(Command::RDA)] = [] (DRAM<SALP>* node, int id) {
+            lambda[int(Level::SubArray)][int(Command::RDA)] = [] (DRAM<SALP>* node, AddressField id) {
                 node->state = State::Closed;
                 node->row_state.clear();};
-            lambda[int(Level::SubArray)][int(Command::WRA)] = [] (DRAM<SALP>* node, int id) {
+            lambda[int(Level::SubArray)][int(Command::WRA)] = [] (DRAM<SALP>* node, AddressField id) {
                 node->state = State::Closed;
                 node->row_state.clear();};
-            lambda[int(Level::Rank)][int(Command::PDE)] = [] (DRAM<SALP>* node, int id) {
+            lambda[int(Level::Rank)][int(Command::PDE)] = [] (DRAM<SALP>* node, AddressField id) {
                 for (auto bank : node->children)
                     for (auto sa : bank->children) {
                         if (sa->state == State::Closed)
@@ -442,11 +442,11 @@ void SALP::init_lambda()
             break;
         default: assert(false);
     }
-    lambda[int(Level::Rank)][int(Command::PDX)] = [] (DRAM<SALP>* node, int id) {
+    lambda[int(Level::Rank)][int(Command::PDX)] = [] (DRAM<SALP>* node, AddressField id) {
         node->state = State::PowerUp;};
-    lambda[int(Level::Rank)][int(Command::SRE)] = [] (DRAM<SALP>* node, int id) {
+    lambda[int(Level::Rank)][int(Command::SRE)] = [] (DRAM<SALP>* node, AddressField id) {
         node->state = State::SelfRefresh;};
-    lambda[int(Level::Rank)][int(Command::SRX)] = [] (DRAM<SALP>* node, int id) {
+    lambda[int(Level::Rank)][int(Command::SRX)] = [] (DRAM<SALP>* node, AddressField id) {
         node->state = State::PowerUp;};
 }
 

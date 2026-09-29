@@ -143,7 +143,6 @@ public:
     int tx_bits;
     FILE* addr_decode_trace = nullptr;
     unsigned long long addr_decode_event_id = 0;
-    bool addr_decode_warned = false;
 
     Memory(const Config& configs, vector<Controller<T>*> ctrls)
         : ctrls(ctrls),
@@ -367,7 +366,7 @@ public:
     bool send(Request req)
     {
         req.addr_vec.resize(addr_bits.size());
-        long addr = req.addr;
+        uint64_t addr = static_cast<uint64_t>(req.addr);
         int coreid = req.coreid;
         int row_input_bits = 0;
 
@@ -390,26 +389,12 @@ public:
                 // fill out addr_vec for everything up until row
                 for (int i = 1; i < int(T::Level::Row); i++)
                     req.addr_vec[i] = slice_lower_bits(addr, addr_bits[i]);
-                if (addr_decode_trace) {
-                    const unsigned long remaining = static_cast<unsigned long>(addr);
-                    row_input_bits = use_rest_of_addr_as_row_addr ?
-                        (remaining ? sizeof(remaining) * CHAR_BIT - __builtin_clzl(remaining) : 0) :
-                        addr_bits[int(T::Level::Row)];
-                    if (use_rest_of_addr_as_row_addr && !addr_decode_warned &&
-                        (row_input_bits == 0 || row_input_bits >= 32)) {
-                        std::fprintf(stderr,
-                                     "Ramulator decode warning: PA=0x%016llx row_input_bits=%d; existing row extractor has undefined behavior at this width\n",
-                                     static_cast<unsigned long long>(static_cast<uint64_t>(req.addr)), row_input_bits);
-                        addr_decode_warned = true;
-                    }
-                }
+                row_input_bits = use_rest_of_addr_as_row_addr ?
+                    address_bit_width(addr) : addr_bits[int(T::Level::Row)];
                 // for the row addr, if use_rest_of_addr_as_row_addr is on, then we use all the remaining
                 // phys addr bits in the row address (to make sure two distinct phys addrs never alias to
                 // the same data in Ramulator)
-                req.addr_vec[int(T::Level::Row)] = slice_lower_bits(addr, 
-                    use_rest_of_addr_as_row_addr? 
-                    sizeof(addr)*CHAR_BIT - __builtin_clzl(addr): 
-                    addr_bits[int(T::Level::Row)]);
+                req.addr_vec[int(T::Level::Row)] = slice_lower_bits(addr, row_input_bits);
                 if (use_rest_of_addr_as_row_addr)
                     assert(0==addr); // should have consumed all the phys addr bits
                 break;
@@ -421,13 +406,13 @@ public:
             if (addr_decode_trace) {
                 const uint64_t physical = static_cast<uint64_t>(req.addr);
                 const uint64_t transaction = physical & ~((uint64_t(1) << tx_bits) - 1);
-                std::fprintf(addr_decode_trace, "%llu,%d,0x%016llx,0x%016llx,%d,%d,%d,",
+                std::fprintf(addr_decode_trace, "%llu,%d,0x%016llx,0x%016llx,%d,%lld,%d,",
                              ++addr_decode_event_id, coreid,
                              static_cast<unsigned long long>(physical),
                              static_cast<unsigned long long>(transaction), row_input_bits,
-                             req.addr_vec[int(T::Level::Row)], spec->org_entry.count[int(T::Level::Row)]);
+                             static_cast<long long>(req.addr_vec[int(T::Level::Row)]), spec->org_entry.count[int(T::Level::Row)]);
                 for (size_t i = 0; i < req.addr_vec.size(); i++)
-                    std::fprintf(addr_decode_trace, "%s%d", i ? ":" : "", req.addr_vec[i]);
+                    std::fprintf(addr_decode_trace, "%s%lld", i ? ":" : "", static_cast<long long>(req.addr_vec[i]));
                 std::fputc('\n', addr_decode_trace);
             }
             // tally stats here to avoid double counting for requests that aren't enqueued
@@ -541,15 +526,17 @@ private:
             n ++;
         return n;
     }
-    int slice_lower_bits(long& addr, int bits)
+    AddressField slice_lower_bits(uint64_t& addr, int bits)
     {
-        int lbits = addr & ((1<<bits) - 1);
-        addr >>= bits;
-        return lbits;
+        assert(bits >= 0 && bits < 64);
+        const uint64_t field = slice_address_bits(addr, bits);
+        assert(field <= uint64_t(INT64_MAX));
+        return static_cast<AddressField>(field);
     }
-    void clear_lower_bits(long& addr, int bits)
+    void clear_lower_bits(uint64_t& addr, int bits)
     {
-        addr >>= bits;
+        assert(bits >= 0 && bits < 64);
+        slice_address_bits(addr, bits);
     }
     long lrand(void) {
         if(sizeof(int) < sizeof(long)) {

@@ -419,7 +419,7 @@ public:
         if (req == queue->q.end() || !is_ready(req)) {
             // we couldn't find a command to schedule -- let's try to be speculative
             auto cmd = T::Command::PRE;
-            vector<int> victim = rowpolicy->get_victim(cmd);
+            vector<AddressField> victim = rowpolicy->get_victim(cmd);
             if (!victim.empty()){
                 issue_cmd(cmd, victim, 0);
             }
@@ -496,7 +496,7 @@ public:
         return channel->check(cmd, req->addr_vec.data(), clk);
     }
 
-    bool is_ready(typename T::Command cmd, const vector<int>& addr_vec)
+    bool is_ready(typename T::Command cmd, const vector<AddressField>& addr_vec)
     {
         return channel->check(cmd, addr_vec.data(), clk);
     }
@@ -508,7 +508,7 @@ public:
         return channel->check_row_hit(cmd, req->addr_vec.data());
     }
 
-    bool is_row_hit(typename T::Command cmd, const vector<int>& addr_vec)
+    bool is_row_hit(typename T::Command cmd, const vector<AddressField>& addr_vec)
     {
         return channel->check_row_hit(cmd, addr_vec.data());
     }
@@ -520,7 +520,7 @@ public:
         return channel->check_row_open(cmd, req->addr_vec.data());
     }
 
-    bool is_row_open(typename T::Command cmd, const vector<int>& addr_vec)
+    bool is_row_open(typename T::Command cmd, const vector<AddressField>& addr_vec)
     {
         return channel->check_row_open(cmd, addr_vec.data());
     }
@@ -567,7 +567,7 @@ private:
 
     // upgrade to an autoprecharge command
     void cmd_issue_autoprecharge(typename T::Command& cmd,
-                                            const vector<int>& addr_vec) {
+                                            const vector<AddressField>& addr_vec) {
 
         // currently, autoprecharge is only used with closed row policy
         if(channel->spec->is_accessing(cmd) && rowpolicy->type == RowPolicy<T>::Type::ClosedAP) {
@@ -575,14 +575,14 @@ private:
             Queue* queue = write_mode ? &writeq : &readq;
 
             auto begin = addr_vec.begin();
-            vector<int> rowgroup(begin, begin + int(T::Level::Row) + 1);
+            vector<AddressField> rowgroup(begin, begin + int(T::Level::Row) + 1);
 
 			int num_row_hits = 0;
 
             for (auto itr = queue->q.begin(); itr != queue->q.end(); ++itr) {
                 if (is_row_hit(itr)) { 
                     auto begin2 = itr->addr_vec.begin();
-                    vector<int> rowgroup2(begin2, begin2 + int(T::Level::Row) + 1);
+                    vector<AddressField> rowgroup2(begin2, begin2 + int(T::Level::Row) + 1);
                     if(rowgroup == rowgroup2)
                         num_row_hits++;
                 }
@@ -593,7 +593,7 @@ private:
                 for (auto itr = queue->q.begin(); itr != queue->q.end(); ++itr) {
                     if (is_row_hit(itr)) {
                         auto begin2 = itr->addr_vec.begin();
-                        vector<int> rowgroup2(begin2, begin2 + int(T::Level::Row) + 1);
+                        vector<AddressField> rowgroup2(begin2, begin2 + int(T::Level::Row) + 1);
                         if(rowgroup == rowgroup2)
                             num_row_hits++;
                     }
@@ -615,7 +615,7 @@ private:
 
     }
 
-    void issue_cmd(typename T::Command cmd, const vector<int>& addr_vec, int coreid)
+    void issue_cmd(typename T::Command cmd, const vector<AddressField>& addr_vec, int coreid)
     {
         cmd_issue_autoprecharge(cmd, addr_vec);
         assert(is_ready(cmd, addr_vec));
@@ -659,17 +659,17 @@ private:
         if (print_cmd_trace){
             printf("%5s %10ld:", channel->spec->command_name[int(cmd)].c_str(), clk);
             for (int lev = 0; lev < int(T::Level::MAX); lev++)
-                printf(" %5d", addr_vec[lev]);
+                printf(" %5lld", static_cast<long long>(addr_vec[lev]));
             printf("\n");
         }
     }
-    vector<int> get_addr_vec(typename T::Command cmd, list<Request>::iterator req){
+    vector<AddressField> get_addr_vec(typename T::Command cmd, list<Request>::iterator req){
         return req->addr_vec;
     }
 };
 
 template <>
-vector<int> Controller<SALP>::get_addr_vec(
+vector<AddressField> Controller<SALP>::get_addr_vec(
     SALP::Command cmd, list<Request>::iterator req);
 
 template <>
@@ -683,7 +683,7 @@ void Controller<TLDRAM>::tick();
 
 template <>
 void Controller<TLDRAM>::cmd_issue_autoprecharge(typename TLDRAM::Command& cmd,
-                                                    const vector<int>& addr_vec);
+                                                    const vector<AddressField>& addr_vec);
 
 } /*namespace ramulator*/
 

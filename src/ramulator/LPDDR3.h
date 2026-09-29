@@ -157,12 +157,12 @@ public:
     };
 
     /* Prerequisite */
-    function<Command(DRAM<LPDDR3>*, Command cmd, int)> prereq[int(Level::MAX)][int(Command::MAX)];
+    function<Command(DRAM<LPDDR3>*, Command cmd, AddressField)> prereq[int(Level::MAX)][int(Command::MAX)];
 
     // SAUGATA: added function object container for row hit status
     /* Row hit */
-    function<bool(DRAM<LPDDR3>*, Command cmd, int)> rowhit[int(Level::MAX)][int(Command::MAX)];
-    function<bool(DRAM<LPDDR3>*, Command cmd, int)> rowopen[int(Level::MAX)][int(Command::MAX)];
+    function<bool(DRAM<LPDDR3>*, Command cmd, AddressField)> rowhit[int(Level::MAX)][int(Command::MAX)];
+    function<bool(DRAM<LPDDR3>*, Command cmd, AddressField)> rowopen[int(Level::MAX)][int(Command::MAX)];
 
     /* Timing */
     struct TimingEntry
@@ -175,7 +175,7 @@ public:
     vector<TimingEntry> timing[int(Level::MAX)][int(Command::MAX)];
 
     /* Lambda */
-    function<void(DRAM<LPDDR3>*, int)> lambda[int(Level::MAX)][int(Command::MAX)];
+    function<void(DRAM<LPDDR3>*, AddressField)> lambda[int(Level::MAX)][int(Command::MAX)];
 
     /* Organization */
     enum class Org : int

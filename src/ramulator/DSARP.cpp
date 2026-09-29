@@ -149,7 +149,7 @@ void DSARP::init_speed()
 void DSARP::init_prereq()
 {
   // RD
-  prereq[int(Level::Rank)][int(Command::RD)] = [] (DRAM<DSARP>* node, Command cmd, int id) {
+  prereq[int(Level::Rank)][int(Command::RD)] = [] (DRAM<DSARP>* node, Command cmd, AddressField id) {
     switch (int(node->state)) {
       case int(State::PowerUp): return Command::MAX;
       case int(State::ActPowerDown): return Command::PDX;
@@ -158,7 +158,7 @@ void DSARP::init_prereq()
       default: assert(false);
     }};
   // Rank transitions to Bank
-  prereq[int(Level::Bank)][int(Command::RD)] = [] (DRAM<DSARP>* node, Command cmd, int id) {
+  prereq[int(Level::Bank)][int(Command::RD)] = [] (DRAM<DSARP>* node, Command cmd, AddressField id) {
     switch (int(node->state)) {
       case int(State::Closed): return Command::ACT;
       case int(State::Opened):
@@ -169,7 +169,7 @@ void DSARP::init_prereq()
       default: assert(false);
     }};
   // Bank transitions to Subarray
-  prereq[int(Level::SubArray)][int(Command::RD)] = [] (DRAM<DSARP>* node, Command cmd, int id) {
+  prereq[int(Level::SubArray)][int(Command::RD)] = [] (DRAM<DSARP>* node, Command cmd, AddressField id) {
     switch (int(node->state)) {
       case int(State::Closed): return Command::ACT;
       case int(State::Opened):
@@ -186,7 +186,7 @@ void DSARP::init_prereq()
   prereq[int(Level::SubArray)][int(Command::WR)] = prereq[int(Level::SubArray)][int(Command::RD)];
 
   // REF -- on all banks
-  prereq[int(Level::Rank)][int(Command::REF)] = [] (DRAM<DSARP>* node, Command cmd, int id) {
+  prereq[int(Level::Rank)][int(Command::REF)] = [] (DRAM<DSARP>* node, Command cmd, AddressField id) {
     for (auto bank : node->children) {
       if (bank->state == State::Closed)
         continue;
@@ -195,12 +195,12 @@ void DSARP::init_prereq()
     return Command::REF;};
 
   // REF -- per bank
-  prereq[int(Level::Bank)][int(Command::REFPB)] = [] (DRAM<DSARP>* node, Command cmd, int id) {
+  prereq[int(Level::Bank)][int(Command::REFPB)] = [] (DRAM<DSARP>* node, Command cmd, AddressField id) {
     if (node->state == State::Closed) return Command::REFPB;
     else return Command::PRE;};
 
   // PD
-  prereq[int(Level::Rank)][int(Command::PDE)] = [] (DRAM<DSARP>* node, Command cmd, int id) {
+  prereq[int(Level::Rank)][int(Command::PDE)] = [] (DRAM<DSARP>* node, Command cmd, AddressField id) {
     switch (int(node->state)) {
       case int(State::PowerUp): return Command::PDE;
       case int(State::ActPowerDown): return Command::PDE;
@@ -210,7 +210,7 @@ void DSARP::init_prereq()
     }};
 
   // SR
-  prereq[int(Level::Rank)][int(Command::SRE)] = [] (DRAM<DSARP>* node, Command cmd, int id) {
+  prereq[int(Level::Rank)][int(Command::SRE)] = [] (DRAM<DSARP>* node, Command cmd, AddressField id) {
     switch (int(node->state)) {
       case int(State::PowerUp): return Command::SRE;
       case int(State::ActPowerDown): return Command::PDX;
@@ -224,7 +224,7 @@ void DSARP::init_prereq()
 void DSARP::init_rowhit()
 {
   // RD
-  rowhit[int(Level::SubArray)][int(Command::RD)] = [] (DRAM<DSARP>* node, Command cmd, int id) {
+  rowhit[int(Level::SubArray)][int(Command::RD)] = [] (DRAM<DSARP>* node, Command cmd, AddressField id) {
       switch (int(node->state)){
           case int(State::Closed): return false;
           case int(State::Opened):
@@ -239,7 +239,7 @@ void DSARP::init_rowhit()
 void DSARP::init_rowopen()
 {
   // RD
-  rowopen[int(Level::SubArray)][int(Command::RD)] = [] (DRAM<DSARP>* node, Command cmd, int id) {
+  rowopen[int(Level::SubArray)][int(Command::RD)] = [] (DRAM<DSARP>* node, Command cmd, AddressField id) {
       switch (int(node->state)){
           case int(State::Closed): return false;
           case int(State::Opened): return true;
@@ -252,7 +252,7 @@ void DSARP::init_rowopen()
 void DSARP::init_lambda()
 {
   // RANK
-  lambda[int(Level::Rank)][int(Command::PREA)] = [] (DRAM<DSARP>* node, int id) {
+  lambda[int(Level::Rank)][int(Command::PREA)] = [] (DRAM<DSARP>* node, AddressField id) {
     node->row_state.clear();
     for (auto bank : node->children) {
       bank->state = State::Closed;
@@ -260,10 +260,10 @@ void DSARP::init_lambda()
       for (auto sa : bank->children){
         sa->state = State::Closed;
         sa->row_state.clear();}}};
-  lambda[int(Level::Rank)][int(Command::REF)] = [] (DRAM<DSARP>* node, int id) {};
+  lambda[int(Level::Rank)][int(Command::REF)] = [] (DRAM<DSARP>* node, AddressField id) {};
 
   // Power down related commands
-  lambda[int(Level::Rank)][int(Command::PDE)] = [] (DRAM<DSARP>* node, int id) {
+  lambda[int(Level::Rank)][int(Command::PDE)] = [] (DRAM<DSARP>* node, AddressField id) {
     for (auto bank : node->children) {
       if (bank->state == State::Closed)
         continue;
@@ -271,56 +271,56 @@ void DSARP::init_lambda()
       return;
     }
     node->state = State::PrePowerDown;};
-  lambda[int(Level::Rank)][int(Command::PDX)] = [] (DRAM<DSARP>* node, int id) {
+  lambda[int(Level::Rank)][int(Command::PDX)] = [] (DRAM<DSARP>* node, AddressField id) {
     node->state = State::PowerUp;};
-  lambda[int(Level::Rank)][int(Command::SRE)] = [] (DRAM<DSARP>* node, int id) {
+  lambda[int(Level::Rank)][int(Command::SRE)] = [] (DRAM<DSARP>* node, AddressField id) {
     node->state = State::SelfRefresh;};
-  lambda[int(Level::Rank)][int(Command::SRX)] = [] (DRAM<DSARP>* node, int id) {
+  lambda[int(Level::Rank)][int(Command::SRX)] = [] (DRAM<DSARP>* node, AddressField id) {
     node->state = State::PowerUp;};
 
   // Open a row
-  lambda[int(Level::Bank)][int(Command::ACT)] = [] (DRAM<DSARP>* node, int id) {
+  lambda[int(Level::Bank)][int(Command::ACT)] = [] (DRAM<DSARP>* node, AddressField id) {
     node->state = State::Opened;
     node->row_state[id] = State::Opened;};
-  lambda[int(Level::SubArray)][int(Command::ACT)] = [] (DRAM<DSARP>* node, int id) {
+  lambda[int(Level::SubArray)][int(Command::ACT)] = [] (DRAM<DSARP>* node, AddressField id) {
     node->state = State::Opened;
     node->row_state[id] = State::Opened;};
 
   // Close a bank
-  lambda[int(Level::Bank)][int(Command::PRE)] = [] (DRAM<DSARP>* node, int id) {
+  lambda[int(Level::Bank)][int(Command::PRE)] = [] (DRAM<DSARP>* node, AddressField id) {
     node->state = State::Closed;
     node->row_state.clear();
     for (auto sa : node->children){
       sa->state = State::Closed;
       sa->row_state.clear();}};
 
-  lambda[int(Level::Bank)][int(Command::RD)] = [] (DRAM<DSARP>* node, int id) {};
-  lambda[int(Level::Bank)][int(Command::WR)] = [] (DRAM<DSARP>* node, int id) {};
+  lambda[int(Level::Bank)][int(Command::RD)] = [] (DRAM<DSARP>* node, AddressField id) {};
+  lambda[int(Level::Bank)][int(Command::WR)] = [] (DRAM<DSARP>* node, AddressField id) {};
 
   // Make sure the bank is closed after the column command
-  lambda[int(Level::Bank)][int(Command::RDA)] = [] (DRAM<DSARP>* node, int id) {
+  lambda[int(Level::Bank)][int(Command::RDA)] = [] (DRAM<DSARP>* node, AddressField id) {
     node->state = State::Closed;
     node->row_state.clear();};
 
-  lambda[int(Level::Bank)][int(Command::WRA)] = [] (DRAM<DSARP>* node, int id) {
+  lambda[int(Level::Bank)][int(Command::WRA)] = [] (DRAM<DSARP>* node, AddressField id) {
     node->state = State::Closed;
     node->row_state.clear();};
 
   // Nothing much, just make sure the bank is closed
-  lambda[int(Level::Bank)][int(Command::REFPB)] = [] (DRAM<DSARP>* node, int id) {
+  lambda[int(Level::Bank)][int(Command::REFPB)] = [] (DRAM<DSARP>* node, AddressField id) {
     assert(node->state == State::Closed);
     node->row_state.clear();};
 
   // COL
-  lambda[int(Level::SubArray)][int(Command::RDA)] = [] (DRAM<DSARP>* node, int id) {
+  lambda[int(Level::SubArray)][int(Command::RDA)] = [] (DRAM<DSARP>* node, AddressField id) {
     node->state = State::Closed;
     node->row_state.clear();};
-  lambda[int(Level::SubArray)][int(Command::WRA)] = [] (DRAM<DSARP>* node, int id) {
+  lambda[int(Level::SubArray)][int(Command::WRA)] = [] (DRAM<DSARP>* node, AddressField id) {
     node->state = State::Closed;
     node->row_state.clear();};
 
   // PowerDown -- this has not been tested
-  lambda[int(Level::Rank)][int(Command::PDE)] = [] (DRAM<DSARP>* node, int id) {
+  lambda[int(Level::Rank)][int(Command::PDE)] = [] (DRAM<DSARP>* node, AddressField id) {
     for (auto bank : node->children)
       for (auto sa : bank->children) {
         if (sa->state == State::Closed)

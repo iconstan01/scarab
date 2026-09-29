@@ -24,6 +24,7 @@
 
 #include "Statistics.h"
 #include <iostream>
+#include "Address.h"
 #include <vector>
 #include <deque>
 #include <map>
@@ -69,32 +70,32 @@ public:
     // State of Rows:
     // There are too many rows for them to be instantiated individually
     // Instead, their bank (or an equivalent entity) tracks their state for them
-    map<int, typename T::State> row_state;
+    map<AddressField, typename T::State> row_state;
 
     // Insert a node as one of my child nodes
     void insert(DRAM<T>* child);
 
     // Decode a command into its "prerequisite" command (if any is needed)
-    typename T::Command decode(typename T::Command cmd, const int* addr);
+    typename T::Command decode(typename T::Command cmd, const AddressField* addr);
 
     // Check whether a command is ready to be scheduled
-    bool check(typename T::Command cmd, const int* addr, long clk);
+    bool check(typename T::Command cmd, const AddressField* addr, long clk);
 
     // Check whether a command is a row hit
-    bool check_row_hit(typename T::Command cmd, const int* addr);
+    bool check_row_hit(typename T::Command cmd, const AddressField* addr);
 
     // Check whether a row is open
-    bool check_row_open(typename T::Command cmd, const int* addr);
+    bool check_row_open(typename T::Command cmd, const AddressField* addr);
 
     // Return the earliest clock when a command is ready to be scheduled
-    long get_next(typename T::Command cmd, const int* addr);
+    long get_next(typename T::Command cmd, const AddressField* addr);
 
     // Update the timing/state of the tree, signifying that a command has been issued
-    void update(typename T::Command cmd, const int* addr, long clk);
+    void update(typename T::Command cmd, const AddressField* addr, long clk);
     // Update statistics:
 
     // Update the number of requests it serves currently
-    void update_serving_requests(const int* addr, int delta, long clk);
+    void update_serving_requests(const AddressField* addr, int delta, long clk);
 
     // TIANSHI: current serving requests count
     int cur_serving_requests = 0;
@@ -121,25 +122,25 @@ private:
 
     // Lookup table for which commands must be preceded by which other commands (i.e., "prerequisite")
     // E.g., a read command to a closed bank must be preceded by an activate command
-    function<typename T::Command(DRAM<T>*, typename T::Command cmd, int)>* prereq;
+    function<typename T::Command(DRAM<T>*, typename T::Command cmd, AddressField)>* prereq;
 
     // SAUGATA: added table for row hits
     // Lookup table for whether a command is a row hit
     // E.g., a read command to a closed bank must be preceded by an activate command
-    function<bool(DRAM<T>*, typename T::Command cmd, int)>* rowhit;
-    function<bool(DRAM<T>*, typename T::Command cmd, int)>* rowopen;
+    function<bool(DRAM<T>*, typename T::Command cmd, AddressField)>* rowhit;
+    function<bool(DRAM<T>*, typename T::Command cmd, AddressField)>* rowopen;
 
     // Lookup table between commands and the state transitions they trigger
     // E.g., an activate command to a closed bank opens both the bank and the row
-    function<void(DRAM<T>*, int)>* lambda;
+    function<void(DRAM<T>*, AddressField)>* lambda;
 
     // Lookup table for timing parameters
     // E.g., activate->precharge: tRAS@bank, activate->activate: tRC@bank
     vector<typename T::TimingEntry>* timing;
 
     // Helper Functions
-    void update_state(typename T::Command cmd, const int* addr);
-    void update_timing(typename T::Command cmd, const int* addr, long clk);
+    void update_state(typename T::Command cmd, const AddressField* addr);
+    void update_timing(typename T::Command cmd, const AddressField* addr, long clk);
 }; /* class DRAM */
 
 
@@ -266,9 +267,9 @@ void DRAM<T>::insert(DRAM<T>* child)
 
 // Decode
 template <typename T>
-typename T::Command DRAM<T>::decode(typename T::Command cmd, const int* addr)
+typename T::Command DRAM<T>::decode(typename T::Command cmd, const AddressField* addr)
 {
-    int child_id = addr[int(level)+1];
+    AddressField child_id = addr[int(level)+1];
     if (prereq[int(cmd)]) {
         typename T::Command prereq_cmd = prereq[int(cmd)](this, cmd, child_id);
         if (prereq_cmd != T::Command::MAX)
@@ -285,12 +286,12 @@ typename T::Command DRAM<T>::decode(typename T::Command cmd, const int* addr)
 
 // Check
 template <typename T>
-bool DRAM<T>::check(typename T::Command cmd, const int* addr, long clk)
+bool DRAM<T>::check(typename T::Command cmd, const AddressField* addr, long clk)
 {
     if (next[int(cmd)] != -1 && clk < next[int(cmd)])
         return false; // stop recursion: the check failed at this level
 
-    int child_id = addr[int(level)+1];
+    AddressField child_id = addr[int(level)+1];
     if (child_id < 0 || level == spec->scope[int(cmd)] || !children.size())
         return true; // stop recursion: the check passed at all levels
 
@@ -301,9 +302,9 @@ bool DRAM<T>::check(typename T::Command cmd, const int* addr, long clk)
 // SAUGATA: added function to check whether a command is a row hit
 // Check row hits
 template <typename T>
-bool DRAM<T>::check_row_hit(typename T::Command cmd, const int* addr)
+bool DRAM<T>::check_row_hit(typename T::Command cmd, const AddressField* addr)
 {
-    int child_id = addr[int(level)+1];
+    AddressField child_id = addr[int(level)+1];
     if (rowhit[int(cmd)]) {
         return rowhit[int(cmd)](this, cmd, child_id);  // stop recursion: there is a row hit at this level
     }
@@ -316,9 +317,9 @@ bool DRAM<T>::check_row_hit(typename T::Command cmd, const int* addr)
 }
 
 template <typename T>
-bool DRAM<T>::check_row_open(typename T::Command cmd, const int* addr)
+bool DRAM<T>::check_row_open(typename T::Command cmd, const AddressField* addr)
 {
-    int child_id = addr[int(level)+1];
+    AddressField child_id = addr[int(level)+1];
     if (rowopen[int(cmd)]) {
         return rowopen[int(cmd)](this, cmd, child_id);  // stop recursion: there is a row hit at this level
     }
@@ -331,7 +332,7 @@ bool DRAM<T>::check_row_open(typename T::Command cmd, const int* addr)
 }
 
 template <typename T>
-long DRAM<T>::get_next(typename T::Command cmd, const int* addr)
+long DRAM<T>::get_next(typename T::Command cmd, const AddressField* addr)
 {
     long next_clk = max(cur_clk, next[int(cmd)]);
     auto node = this;
@@ -344,7 +345,7 @@ long DRAM<T>::get_next(typename T::Command cmd, const int* addr)
 
 // Update
 template <typename T>
-void DRAM<T>::update(typename T::Command cmd, const int* addr, long clk)
+void DRAM<T>::update(typename T::Command cmd, const AddressField* addr, long clk)
 {
     cur_clk = clk;
     update_state(cmd, addr);
@@ -354,9 +355,9 @@ void DRAM<T>::update(typename T::Command cmd, const int* addr, long clk)
 
 // Update (State)
 template <typename T>
-void DRAM<T>::update_state(typename T::Command cmd, const int* addr)
+void DRAM<T>::update_state(typename T::Command cmd, const AddressField* addr)
 {
-    int child_id = addr[int(level)+1];
+    AddressField child_id = addr[int(level)+1];
     if (lambda[int(cmd)])
         lambda[int(cmd)](this, child_id); // update this level
 
@@ -370,7 +371,7 @@ void DRAM<T>::update_state(typename T::Command cmd, const int* addr)
 
 // Update (Timing)
 template <typename T>
-void DRAM<T>::update_timing(typename T::Command cmd, const int* addr, long clk)
+void DRAM<T>::update_timing(typename T::Command cmd, const AddressField* addr, long clk)
 {
     // I am not a target node: I am merely one of its siblings
     if (id != addr[int(level)]) {
@@ -427,7 +428,7 @@ void DRAM<T>::update_timing(typename T::Command cmd, const int* addr, long clk)
 }
 
 template <typename T>
-void DRAM<T>::update_serving_requests(const int* addr, int delta, long clk) {
+void DRAM<T>::update_serving_requests(const AddressField* addr, int delta, long clk) {
   assert(id == addr[int(level)]);
   assert(delta == 1 || delta == -1);
   // update total serving requests
@@ -459,7 +460,7 @@ void DRAM<T>::update_serving_requests(const int* addr, int delta, long clk) {
     refresh_intervals.clear();
   }
 
-  int child_id = addr[int(level) + 1];
+  AddressField child_id = addr[int(level) + 1];
   // We only count the level bank or the level higher than bank
   if (child_id < 0 || !children.size() || (int(level) > int(T::Level::Bank)) ) {
     return;

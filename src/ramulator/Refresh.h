@@ -119,7 +119,7 @@ private:
   // Refresh based on the specified address
   void refresh_target(Controller<T>* ctrl, int rank, int bank, int sa)
   {
-    vector<int> addr_vec(int(T::Level::MAX), -1);
+    vector<AddressField> addr_vec(int(T::Level::MAX), -1);
     addr_vec[0] = ctrl->channel->id;
     addr_vec[1] = rank;
     addr_vec[2] = bank;

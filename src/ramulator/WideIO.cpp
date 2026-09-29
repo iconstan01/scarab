@@ -157,7 +157,7 @@ void WideIO::init_speed()
 void WideIO::init_prereq()
 {
     // RD
-    prereq[int(Level::Rank)][int(Command::RD)] = [] (DRAM<WideIO>* node, Command cmd, int id) {
+    prereq[int(Level::Rank)][int(Command::RD)] = [] (DRAM<WideIO>* node, Command cmd, AddressField id) {
         switch (int(node->state)) {
             case int(State::PowerUp): return Command::MAX;
             case int(State::ActPowerDown): return Command::PDX;
@@ -165,7 +165,7 @@ void WideIO::init_prereq()
             case int(State::SelfRefresh): return Command::SREFX;
             default: assert(false);
         }};
-    prereq[int(Level::Bank)][int(Command::RD)] = [] (DRAM<WideIO>* node, Command cmd, int id) {
+    prereq[int(Level::Bank)][int(Command::RD)] = [] (DRAM<WideIO>* node, Command cmd, AddressField id) {
         switch (int(node->state)) {
             case int(State::Closed): return Command::ACT;
             case int(State::Opened):
@@ -180,7 +180,7 @@ void WideIO::init_prereq()
     prereq[int(Level::Bank)][int(Command::WR)] = prereq[int(Level::Bank)][int(Command::RD)];
 
     // REF
-    prereq[int(Level::Rank)][int(Command::REF)] = [] (DRAM<WideIO>* node, Command cmd, int id) {
+    prereq[int(Level::Rank)][int(Command::REF)] = [] (DRAM<WideIO>* node, Command cmd, AddressField id) {
         for (auto bank : node->children) {
             if (bank->state == State::Closed)
                 continue;
@@ -189,7 +189,7 @@ void WideIO::init_prereq()
         return Command::REF;};
 
     // PD
-    prereq[int(Level::Rank)][int(Command::PD)] = [] (DRAM<WideIO>* node, Command cmd, int id) {
+    prereq[int(Level::Rank)][int(Command::PD)] = [] (DRAM<WideIO>* node, Command cmd, AddressField id) {
         switch (int(node->state)) {
             case int(State::PowerUp): return Command::PD;
             case int(State::ActPowerDown): return Command::PD;
@@ -199,7 +199,7 @@ void WideIO::init_prereq()
         }};
 
     // SR
-    prereq[int(Level::Rank)][int(Command::SREF)] = [] (DRAM<WideIO>* node, Command cmd, int id) {
+    prereq[int(Level::Rank)][int(Command::SREF)] = [] (DRAM<WideIO>* node, Command cmd, AddressField id) {
         switch (int(node->state)) {
             case int(State::PowerUp): return Command::SREF;
             case int(State::ActPowerDown): return Command::PDX;
@@ -213,7 +213,7 @@ void WideIO::init_prereq()
 void WideIO::init_rowhit()
 {
     // RD
-    rowhit[int(Level::Bank)][int(Command::RD)] = [] (DRAM<WideIO>* node, Command cmd, int id) {
+    rowhit[int(Level::Bank)][int(Command::RD)] = [] (DRAM<WideIO>* node, Command cmd, AddressField id) {
         switch (int(node->state)) {
             case int(State::Closed): return false;
             case int(State::Opened):
@@ -230,7 +230,7 @@ void WideIO::init_rowhit()
 void WideIO::init_rowopen()
 {
     // RD
-    rowopen[int(Level::Bank)][int(Command::RD)] = [] (DRAM<WideIO>* node, Command cmd, int id) {
+    rowopen[int(Level::Bank)][int(Command::RD)] = [] (DRAM<WideIO>* node, Command cmd, AddressField id) {
         switch (int(node->state)) {
             case int(State::Closed): return false;
             case int(State::Opened): return true;
@@ -243,26 +243,26 @@ void WideIO::init_rowopen()
 
 void WideIO::init_lambda()
 {
-    lambda[int(Level::Bank)][int(Command::ACT)] = [] (DRAM<WideIO>* node, int id) {
+    lambda[int(Level::Bank)][int(Command::ACT)] = [] (DRAM<WideIO>* node, AddressField id) {
         node->state = State::Opened;
         node->row_state[id] = State::Opened;};
-    lambda[int(Level::Bank)][int(Command::PRE)] = [] (DRAM<WideIO>* node, int id) {
+    lambda[int(Level::Bank)][int(Command::PRE)] = [] (DRAM<WideIO>* node, AddressField id) {
         node->state = State::Closed;
         node->row_state.clear();};
-    lambda[int(Level::Rank)][int(Command::PRA)] = [] (DRAM<WideIO>* node, int id) {
+    lambda[int(Level::Rank)][int(Command::PRA)] = [] (DRAM<WideIO>* node, AddressField id) {
         for (auto bank : node->children) {
             bank->state = State::Closed;
             bank->row_state.clear();}};
-    lambda[int(Level::Rank)][int(Command::REF)] = [] (DRAM<WideIO>* node, int id) {};
-    lambda[int(Level::Bank)][int(Command::RD)] = [] (DRAM<WideIO>* node, int id) {};
-    lambda[int(Level::Bank)][int(Command::WR)] = [] (DRAM<WideIO>* node, int id) {};
-    lambda[int(Level::Bank)][int(Command::RDA)] = [] (DRAM<WideIO>* node, int id) {
+    lambda[int(Level::Rank)][int(Command::REF)] = [] (DRAM<WideIO>* node, AddressField id) {};
+    lambda[int(Level::Bank)][int(Command::RD)] = [] (DRAM<WideIO>* node, AddressField id) {};
+    lambda[int(Level::Bank)][int(Command::WR)] = [] (DRAM<WideIO>* node, AddressField id) {};
+    lambda[int(Level::Bank)][int(Command::RDA)] = [] (DRAM<WideIO>* node, AddressField id) {
         node->state = State::Closed;
         node->row_state.clear();};
-    lambda[int(Level::Bank)][int(Command::WRA)] = [] (DRAM<WideIO>* node, int id) {
+    lambda[int(Level::Bank)][int(Command::WRA)] = [] (DRAM<WideIO>* node, AddressField id) {
         node->state = State::Closed;
         node->row_state.clear();};
-    lambda[int(Level::Rank)][int(Command::PD)] = [] (DRAM<WideIO>* node, int id) {
+    lambda[int(Level::Rank)][int(Command::PD)] = [] (DRAM<WideIO>* node, AddressField id) {
         for (auto bank : node->children) {
             if (bank->state == State::Closed)
                 continue;
@@ -270,11 +270,11 @@ void WideIO::init_lambda()
             return;
         }
         node->state = State::PrePowerDown;};
-    lambda[int(Level::Rank)][int(Command::PDX)] = [] (DRAM<WideIO>* node, int id) {
+    lambda[int(Level::Rank)][int(Command::PDX)] = [] (DRAM<WideIO>* node, AddressField id) {
         node->state = State::PowerUp;};
-    lambda[int(Level::Rank)][int(Command::SREF)] = [] (DRAM<WideIO>* node, int id) {
+    lambda[int(Level::Rank)][int(Command::SREF)] = [] (DRAM<WideIO>* node, AddressField id) {
         node->state = State::SelfRefresh;};
-    lambda[int(Level::Rank)][int(Command::SREFX)] = [] (DRAM<WideIO>* node, int id) {
+    lambda[int(Level::Rank)][int(Command::SREFX)] = [] (DRAM<WideIO>* node, AddressField id) {
         node->state = State::PowerUp;};
 }
 

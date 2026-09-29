@@ -22,6 +22,7 @@
 #ifndef __REQUEST_H
 #define __REQUEST_H
 
+#include "Address.h"
 #include <vector>
 #include <functional>
 
@@ -36,7 +37,7 @@ public:
     bool is_first_command;
     long addr;
     // long addr_row;
-    vector<int> addr_vec;
+    vector<AddressField> addr_vec;
     // specify which core this request sent from, for virtual address translation
     int coreid;
 
@@ -62,7 +63,7 @@ public:
     Request(long addr, Type type, function<void(Request&)> callback, int coreid = 0)
         : is_first_command(true), addr(addr), coreid(coreid), type(type), callback(callback) {}
 
-    Request(vector<int>& addr_vec, Type type, function<void(Request&)> callback, int coreid = 0)
+    Request(vector<AddressField>& addr_vec, Type type, function<void(Request&)> callback, int coreid = 0)
         : is_first_command(true), addr_vec(addr_vec), coreid(coreid), type(type), callback(callback) {}
 
     Request()

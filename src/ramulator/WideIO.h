@@ -157,12 +157,12 @@ public:
     };
 
     /* Prerequisite */
-    function<Command(DRAM<WideIO>*, Command cmd, int)> prereq[int(Level::MAX)][int(Command::MAX)];
+    function<Command(DRAM<WideIO>*, Command cmd, AddressField)> prereq[int(Level::MAX)][int(Command::MAX)];
 
     // SAUGATA: added function object container for row hit status
     /* Row hit */
-    function<bool(DRAM<WideIO>*, Command cmd, int)> rowhit[int(Level::MAX)][int(Command::MAX)];
-    function<bool(DRAM<WideIO>*, Command cmd, int)> rowopen[int(Level::MAX)][int(Command::MAX)];
+    function<bool(DRAM<WideIO>*, Command cmd, AddressField)> rowhit[int(Level::MAX)][int(Command::MAX)];
+    function<bool(DRAM<WideIO>*, Command cmd, AddressField)> rowopen[int(Level::MAX)][int(Command::MAX)];
 
 
     /* Timing */
@@ -176,7 +176,7 @@ public:
     vector<TimingEntry> timing[int(Level::MAX)][int(Command::MAX)];
 
     /* Lambda */
-    function<void(DRAM<WideIO>*, int)> lambda[int(Level::MAX)][int(Command::MAX)];
+    function<void(DRAM<WideIO>*, AddressField)> lambda[int(Level::MAX)][int(Command::MAX)];
 
     /* Organization */
     enum class Org : int
