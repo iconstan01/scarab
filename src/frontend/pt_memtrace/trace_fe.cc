@@ -98,7 +98,11 @@ void off_path_generate_inst(uns proc_id, uint64_t *off_path_addr, ctype_pin_inst
   if (op_iter != pc_to_inst[proc_id].end()) {
     *inst = op_iter->second;
     if (offpath_load_profile_output.is_open()) {
-      offpath_load_profile.observe(proc_id, inst->instruction_addr, inst->ld_vaddr, inst->num_ld);
+      // The instruction record is packed; do not pass a pointer to its array.
+      uint64_t load_addresses[MAX_LD_NUM];
+      for (unsigned i = 0; i < inst->num_ld; ++i)
+        load_addresses[i] = inst->ld_vaddr[i];
+      offpath_load_profile.observe(proc_id, inst->instruction_addr, load_addresses, inst->num_ld);
     }
     (*off_path_addr) += inst->size;
     DEBUG(proc_id, "Generate off-path inst:%lx inst_size:%i ", inst->instruction_addr, inst->size);
