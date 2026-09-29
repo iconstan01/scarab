@@ -1,4 +1,5 @@
 #include "trace_fe.h"
+#include "offpath_load_profile.h"
 
 #include <cstring>
 #include <fstream>
@@ -42,6 +43,8 @@ static ctype_pin_inst next_offpath_pi[MAX_NUM_PROCS][MAX_NUM_BPS];
 static bool off_path_mode[MAX_NUM_PROCS][MAX_NUM_BPS] = {false};
 static uint64_t off_path_addr[MAX_NUM_PROCS][MAX_NUM_BPS] = {0};
 static std::unordered_map<uint64_t, ctype_pin_inst> pc_to_inst[MAX_NUM_PROCS];
+static OffpathLoadProfile offpath_load_profile;
+static std::ofstream offpath_load_profile_output;
 
 /* Per-core circular buffer state */
 struct TraceBufState {
@@ -94,6 +97,9 @@ void off_path_generate_inst(uns proc_id, uint64_t *off_path_addr, ctype_pin_inst
   auto op_iter = pc_to_inst[proc_id].find(*off_path_addr);
   if (op_iter != pc_to_inst[proc_id].end()) {
     *inst = op_iter->second;
+    if (offpath_load_profile_output.is_open()) {
+      offpath_load_profile.observe(proc_id, inst->instruction_addr, inst->ld_vaddr, inst->num_ld);
+    }
     (*off_path_addr) += inst->size;
     DEBUG(proc_id, "Generate off-path inst:%lx inst_size:%i ", inst->instruction_addr, inst->size);
   } else {
@@ -366,6 +372,12 @@ Addr ext_trace_next_fetch_addr(uns proc_id) {
 }
 
 void ext_trace_init() {
+  offpath_load_profile.clear();
+  if (OFFPATH_LOAD_PROFILE_FILE && OFFPATH_LOAD_PROFILE_FILE[0]) {
+    offpath_load_profile_output.open(OFFPATH_LOAD_PROFILE_FILE);
+    if (!offpath_load_profile_output.is_open())
+      FATAL_ERROR(0, "Cannot open off-path load profile '%s'\n", OFFPATH_LOAD_PROFILE_FILE);
+  }
   memset(next_offpath_pi, 0, sizeof(next_offpath_pi));
   memset(next_onpath_pi, 0, sizeof(next_onpath_pi));
 
@@ -385,6 +397,12 @@ void ext_trace_init() {
 }
 
 void ext_trace_done() {
+  if (offpath_load_profile_output.is_open()) {
+    offpath_load_profile.write(offpath_load_profile_output);
+    offpath_load_profile_output.close();
+    if (offpath_load_profile_output.fail())
+      FATAL_ERROR(0, "Failed writing off-path load profile '%s'\n", OFFPATH_LOAD_PROFILE_FILE);
+  }
 }
 
 // is also used to print footprint

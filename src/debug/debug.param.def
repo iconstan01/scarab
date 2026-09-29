@@ -114,6 +114,8 @@ DEF_PARAM( debug_power_utils                       , DEBUG_POWER_UTILS          
 DEF_PARAM( debug_dvfs                              , DEBUG_DVFS                           , Flag    , Flag      , FALSE   ,       )
 
 DEF_PARAM( debug_trace_read                        , DEBUG_TRACE_READ                     , Flag    , Flag      , FALSE   ,       )
+// Optional summary of generated trace-frontend off-path loads; works in opt builds.
+DEF_PARAM( offpath_load_profile_file, OFFPATH_LOAD_PROFILE_FILE, char*, string, NULL, )
 
 DEF_PARAM( debug_inst_fields                       , DEBUG_INST_FIELDS                    , Flag    , Flag      , FALSE   ,       )
 DEF_PARAM( debug_op_fields                         , DEBUG_OP_FIELDS                      , Flag    , Flag      , FALSE   ,       )
