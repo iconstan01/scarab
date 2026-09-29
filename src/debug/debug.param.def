@@ -116,6 +116,9 @@ DEF_PARAM( debug_dvfs                              , DEBUG_DVFS                 
 DEF_PARAM( debug_trace_read                        , DEBUG_TRACE_READ                     , Flag    , Flag      , FALSE   ,       )
 // Optional summary of generated trace-frontend off-path loads; works in opt builds.
 DEF_PARAM( offpath_load_profile_file, OFFPATH_LOAD_PROFILE_FILE, char*, string, NULL, )
+// Detailed saved-load VA history for one untagged instruction PC.
+DEF_PARAM( offpath_load_trace_file, OFFPATH_LOAD_TRACE_FILE, char*, string, NULL, )
+DEF_PARAM( offpath_load_trace_pc, OFFPATH_LOAD_TRACE_PC, uns64, uns64, 0, )
 
 DEF_PARAM( debug_inst_fields                       , DEBUG_INST_FIELDS                    , Flag    , Flag      , FALSE   ,       )
 DEF_PARAM( debug_op_fields                         , DEBUG_OP_FIELDS                      , Flag    , Flag      , FALSE   ,       )

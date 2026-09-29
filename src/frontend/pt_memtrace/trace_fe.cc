@@ -26,6 +26,7 @@
 /* Macros */
 
 #include "globals/assert.h"
+#include "globals/global_vars.h"
 
 #include "debug/debug.param.h"
 #include "debug/debug_macros.h"
@@ -45,6 +46,30 @@ static uint64_t off_path_addr[MAX_NUM_PROCS][MAX_NUM_BPS] = {0};
 static std::unordered_map<uint64_t, ctype_pin_inst> pc_to_inst[MAX_NUM_PROCS];
 static OffpathLoadProfile offpath_load_profile;
 static std::ofstream offpath_load_profile_output;
+static std::ofstream offpath_load_trace_output;
+static uint64_t offpath_load_trace_event = 0;
+static uint64_t load_map_version[MAX_NUM_PROCS];
+static uint64_t load_onpath_observations[MAX_NUM_PROCS];
+
+static void log_load_record(uns core, const char* event, const ctype_pin_inst* previous,
+                            const ctype_pin_inst& current) {
+  const unsigned count = previous ? MAX2(previous->num_ld, current.num_ld) : current.num_ld;
+  for (unsigned i = 0; i < count; ++i) {
+    offpath_load_trace_output << std::dec << ++offpath_load_trace_event << ',' << event
+        << ',' << core << ',' << cycle_count << ',' << sim_time << ','
+        << (inst_count ? inst_count[core] : 0) << ",0x" << std::hex << current.instruction_addr
+        << std::dec << ',' << load_onpath_observations[core] << ',' << load_map_version[core]
+        << ',' << i << ',';
+    if (previous && i < previous->num_ld)
+      offpath_load_trace_output << "0x" << std::hex << previous->ld_vaddr[i];
+    offpath_load_trace_output << ',';
+    if (i < current.num_ld)
+      offpath_load_trace_output << "0x" << std::hex << current.ld_vaddr[i];
+    offpath_load_trace_output << std::dec << '\n';
+  }
+  if (!offpath_load_trace_output)
+    FATAL_ERROR(core, "Failed writing off-path load trace '%s'\n", OFFPATH_LOAD_TRACE_FILE);
+}
 
 /* Per-core circular buffer state */
 struct TraceBufState {
@@ -97,6 +122,8 @@ void off_path_generate_inst(uns proc_id, uint64_t *off_path_addr, ctype_pin_inst
   auto op_iter = pc_to_inst[proc_id].find(*off_path_addr);
   if (op_iter != pc_to_inst[proc_id].end()) {
     *inst = op_iter->second;
+    if (offpath_load_trace_output.is_open() && inst->instruction_addr == OFFPATH_LOAD_TRACE_PC)
+      log_load_record(proc_id, "offpath_generate", nullptr, *inst);
     if (offpath_load_profile_output.is_open()) {
       // The instruction record is packed; do not pass a pointer to its array.
       uint64_t load_addresses[MAX_LD_NUM];
@@ -280,6 +307,20 @@ void ext_trace_fetch_op(uns proc_id, uns bp_id, Op *op) {
       } else {
         uint64_t addr = next_onpath_pi[proc_id].instruction_addr;
         auto find = pc_to_inst[proc_id].find(addr);
+        if (offpath_load_trace_output.is_open() && addr == OFFPATH_LOAD_TRACE_PC) {
+          ++load_onpath_observations[proc_id];
+          const ctype_pin_inst* previous = find == pc_to_inst[proc_id].end() ? nullptr : &find->second;
+          // Mirror all replacement conditions, not just the memory-VA branch.
+          const bool replaced = !previous || next_onpath_pi[proc_id].encoding_is_new ||
+              next_onpath_pi[proc_id].inst_binary_lsb != previous->inst_binary_lsb ||
+              next_onpath_pi[proc_id].inst_binary_msb != previous->inst_binary_msb ||
+              next_onpath_pi[proc_id].instruction_next_addr != previous->instruction_next_addr ||
+              !ctype_pin_inst_same_mem_vaddr(next_onpath_pi[proc_id], *previous);
+          if (replaced)
+            ++load_map_version[proc_id];
+          log_load_record(proc_id, !previous ? "map_insert" : (replaced ? "map_update" : "onpath_observe"),
+                          previous, next_onpath_pi[proc_id]);
+        }
         if (find == pc_to_inst[proc_id].end()) {
           pc_to_inst[proc_id].insert(std::pair<uint64_t, ctype_pin_inst>(addr, next_onpath_pi[proc_id]));
         } else if (next_onpath_pi[proc_id].encoding_is_new) {
@@ -376,6 +417,20 @@ Addr ext_trace_next_fetch_addr(uns proc_id) {
 }
 
 void ext_trace_init() {
+  memset(load_map_version, 0, sizeof(load_map_version));
+  memset(load_onpath_observations, 0, sizeof(load_onpath_observations));
+  offpath_load_trace_event = 0;
+  if (OFFPATH_LOAD_TRACE_FILE && OFFPATH_LOAD_TRACE_FILE[0]) {
+    if (!OFFPATH_LOAD_TRACE_PC)
+      FATAL_ERROR(0, "Off-path load tracing requires --offpath_load_trace_pc\n");
+    if (OFFPATH_LOAD_PROFILE_FILE && !strcmp(OFFPATH_LOAD_TRACE_FILE, OFFPATH_LOAD_PROFILE_FILE))
+      FATAL_ERROR(0, "Off-path load profile and trace need different output files\n");
+    offpath_load_trace_output.open(OFFPATH_LOAD_TRACE_FILE);
+    if (!offpath_load_trace_output.is_open())
+      FATAL_ERROR(0, "Cannot open off-path load trace '%s'\n", OFFPATH_LOAD_TRACE_FILE);
+    offpath_load_trace_output << "event_id,event,core,cycle,sim_time,committed_insts,pc,"
+        "onpath_observation,map_version,load_operand,old_va,va\n";
+  }
   offpath_load_profile.clear();
   if (OFFPATH_LOAD_PROFILE_FILE && OFFPATH_LOAD_PROFILE_FILE[0]) {
     offpath_load_profile_output.open(OFFPATH_LOAD_PROFILE_FILE);
@@ -401,6 +456,11 @@ void ext_trace_init() {
 }
 
 void ext_trace_done() {
+  if (offpath_load_trace_output.is_open()) {
+    offpath_load_trace_output.close();
+    if (offpath_load_trace_output.fail())
+      FATAL_ERROR(0, "Failed writing off-path load trace '%s'\n", OFFPATH_LOAD_TRACE_FILE);
+  }
   if (offpath_load_profile_output.is_open()) {
     offpath_load_profile.write(offpath_load_profile_output);
     offpath_load_profile_output.close();

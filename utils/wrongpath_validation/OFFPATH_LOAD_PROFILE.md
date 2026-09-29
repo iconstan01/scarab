@@ -45,6 +45,40 @@ their occurrence index or cycle.
 
 Exact distinct-VA counting keeps sets in host memory; start with a short run.
 
+## Detailed history for a selected PC
+
+Add these arguments to the same run command (the PC accepts hexadecimal):
+
+```sh
+--offpath_load_trace_pc=0x7fffef498728 \
+--offpath_load_trace_file=OFFPATH_PROFILE_ROB32/selected_load.csv
+```
+
+Use a separate output path for ROB512, keeping the trace and instruction limit
+identical. This logger also works in opt builds and does not require the summary
+profiler to be enabled. It covers all cores for the selected untagged PC.
+
+The CSV records `event_id,event,core,cycle,sim_time,committed_insts,pc,`
+`onpath_observation,map_version,load_operand,old_va,va`.
+
+- `map_insert`: first saved record for this PC.
+- `map_update`: on-path read replaces the saved record, for any replacement reason.
+- `onpath_observe`: on-path read leaves the saved record unchanged.
+- `offpath_generate`: wrong-path generation copies the saved VA; `old_va` is empty.
+
+Each event has one row per load operand. A removed operand has an empty `va`;
+an added operand has an empty `old_va`. `onpath_observation` counts on-path reads
+of this PC per core; `map_version` increments on inserts/replacements. Together
+these identify the cached context used by an off-path generation. They do not
+identify the originating mispredicted branch or guarantee that two speculative
+episodes in different runs correspond. Identical versions can have different
+numbers of off-path generations across runs. Different cycles alone are not
+different addresses. On-path updates occur at trace read, not retirement.
+
+The logger does not track execution or cache access. Events span warmup and ROI
+resets; committed counts may reset, so use `event_id` for file order. Output is
+buffered and completed at normal shutdown; aborts may lose trailing rows.
+
 Standalone aggregation test:
 
 ```sh
