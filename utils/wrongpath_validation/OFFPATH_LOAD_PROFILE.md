@@ -79,6 +79,23 @@ The logger does not track execution or cache access. Events span warmup and ROI
 resets; committed counts may reset, so use `event_id` for file order. Output is
 buffered and completed at normal shutdown; aborts may lose trailing rows.
 
+Compare two selected-PC event logs:
+
+```sh
+python3 bin/compare_offpath_load_traces.py \
+  --baseline ANALYSE_MAPPINGS_WRONG_PATH/ROB32_NAV_4190/selected_load.csv \
+  --candidate ANALYSE_MAPPINGS_WRONG_PATH/ROB512_NAV_4190/selected_load.csv \
+  --output-prefix ANALYSE_MAPPINGS_WRONG_PATH/ROB32_vs_ROB512_selected_load
+```
+
+The output reports the union/intersection of reused VA keys, counts, and the
+number of matching on-path observation/map-version contexts with different VAs.
+It writes per-VA, off-path-context, and on-path-context CSVs. Different VAs in a matched
+context show changed reconstruction for the selected PC; one-run-only contexts
+or changed counts can instead reflect different wrong-path generation. The
+context is not a unique branch-misprediction ID. Interpret one-run-only VAs
+alongside the on-path context history rather than pairing events by row number.
+
 Standalone aggregation test:
 
 ```sh
